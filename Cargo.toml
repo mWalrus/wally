@@ -1,0 +1,30 @@
+[package]
+name = "wally"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+backtrace = "0.3.74"
+bitflags = "2.6.0"
+chrono = { version = "0.4.39", features = ["serde"] }
+clap = { version = "4.5.13", features = ["derive"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+
+[dependencies.smithay]
+git = "https://github.com/Smithay/smithay.git"
+default-features = false
+features = [
+    "backend_winit",
+    "wayland_frontend",
+    "desktop",
+    "backend_session_libseat",
+    "backend_drm",
+    "renderer_multi",
+    "renderer_glow",
+    "backend_gbm",
+    "backend_udev",
+    "backend_egl",
+    "backend_libinput",
+    "use_system_lib",
+]
