@@ -1,12 +1,16 @@
 use smithay::{
-    delegate_xdg_shell,
-    desktop::{find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window},
+    delegate_xdg_decoration, delegate_xdg_shell,
+    desktop::{
+        find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window,
+    },
     input::{
         pointer::{Focus, GrabStartData as PointerGrabStartData},
         Seat,
     },
     reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
+        wayland_protocols::xdg::{
+            decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode, shell::server::xdg_toplevel,
+        },
         wayland_server::{
             protocol::{wl_seat, wl_surface::WlSurface},
             Resource,
@@ -16,8 +20,8 @@ use smithay::{
     wayland::{
         compositor::with_states,
         shell::xdg::{
-            PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
-            XdgToplevelSurfaceData,
+            decoration::XdgDecorationHandler, PopupSurface, PositionerState, ToplevelSurface,
+            XdgShellHandler, XdgShellState, XdgToplevelSurfaceData,
         },
     },
 };
@@ -34,7 +38,7 @@ impl XdgShellHandler for Wally {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let window = Window::new_wayland_window(surface);
-        self.space.map_element(window, (0, 0), false);
+        self.space.map_element(window, (0, 0), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -42,7 +46,12 @@ impl XdgShellHandler for Wally {
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
     }
 
-    fn reposition_request(&mut self, surface: PopupSurface, positioner: PositionerState, token: u32) {
+    fn reposition_request(
+        &mut self,
+        surface: PopupSurface,
+        positioner: PositionerState,
+        token: u32,
+    ) {
         surface.with_pending_state(|state| {
             let geometry = positioner.get_geometry();
             state.geometry = geometry;
@@ -216,3 +225,16 @@ impl Wally {
         });
     }
 }
+
+impl XdgDecorationHandler for Wally {
+    fn new_decoration(&mut self, toplevel: ToplevelSurface) {
+        toplevel.with_pending_state(|state| state.decoration_mode = Some(Mode::ServerSide));
+        toplevel.send_configure();
+    }
+
+    fn request_mode(&mut self, _toplevel: ToplevelSurface, _mode: Mode) {}
+
+    fn unset_mode(&mut self, _toplevel: ToplevelSurface) {}
+}
+
+delegate_xdg_decoration!(Wally);
