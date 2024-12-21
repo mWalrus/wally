@@ -1,7 +1,7 @@
 use smithay::{
     backend::input::{
         AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, InputEvent,
-        KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent,
+        KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent,
     },
     input::{
         keyboard::FilterResult,
@@ -11,7 +11,7 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::state::Wally;
+use crate::{state::Wally, types::keybind::Keybind};
 
 impl Wally {
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
@@ -20,14 +20,30 @@ impl Wally {
                 let serial = SERIAL_COUNTER.next_serial();
                 let time = Event::time_msec(&event);
 
-                self.seat.get_keyboard().unwrap().input::<(), _>(
+                let keyboard = self.seat.get_keyboard().unwrap();
+
+                if let Some(action) = keyboard.input(
                     self,
                     event.key_code(),
                     event.state(),
                     serial,
                     time,
-                    |_, _, _| FilterResult::Forward,
-                );
+                    |state, modifiers_state, keysym_handle| {
+                        if let KeyState::Pressed = event.state() {
+                            // we should be able to get away with this since we wont have combo-binds
+                            let raw_syms = keysym_handle.raw_syms();
+                            let keysym = raw_syms.into_iter().next().unwrap();
+                            let keybind = Keybind::new(modifiers_state, keysym);
+
+                            if let Some(action) = state.config.keybinds.get(&keybind) {
+                                return FilterResult::Intercept(action.clone());
+                            }
+                        }
+                        FilterResult::Forward
+                    },
+                ) {
+                    self.handle_action(action);
+                }
             }
             InputEvent::PointerMotion { .. } => {}
             InputEvent::PointerMotionAbsolute { event, .. } => {
@@ -102,12 +118,12 @@ impl Wally {
             InputEvent::PointerAxis { event, .. } => {
                 let source = event.source();
 
-                let horizontal_amount = event
-                    .amount(Axis::Horizontal)
-                    .unwrap_or_else(|| event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.);
-                let vertical_amount = event
-                    .amount(Axis::Vertical)
-                    .unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.);
+                let horizontal_amount = event.amount(Axis::Horizontal).unwrap_or_else(|| {
+                    event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.
+                });
+                let vertical_amount = event.amount(Axis::Vertical).unwrap_or_else(|| {
+                    event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.
+                });
                 let horizontal_amount_discrete = event.amount_v120(Axis::Horizontal);
                 let vertical_amount_discrete = event.amount_v120(Axis::Vertical);
 

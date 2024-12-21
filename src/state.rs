@@ -22,9 +22,12 @@ use smithay::{
     },
 };
 
-use crate::CalloopData;
+use crate::{config::Config, types::keybind::Action, CalloopData};
 
+// TODO: add config
 pub struct Wally {
+    pub config: Config,
+
     pub start_time: std::time::Instant,
     pub socket_name: OsString,
     pub display_handle: DisplayHandle,
@@ -82,6 +85,7 @@ impl Wally {
         let loop_signal = event_loop.get_signal();
 
         Self {
+            config: Config::new(),
             start_time,
             display_handle: dh,
 
@@ -143,6 +147,15 @@ impl Wally {
             .unwrap();
 
         socket_name
+    }
+
+    pub fn handle_action(&mut self, action: Action) {
+        match action {
+            Action::Spawn(command) => {
+                std::process::Command::new(command).spawn().ok();
+            }
+            _ => {}
+        }
     }
 
     pub fn surface_under(
