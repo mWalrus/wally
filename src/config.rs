@@ -37,7 +37,7 @@ impl Config {
                 ),
                 (
                     Keybind::new(KeyModifiers::SUPER, keysyms::KEY_p),
-                    Action::Spawn("dmenu_run".into()),
+                    Action::Spawn("bemenu_run".into()),
                 ),
             ]),
         }
