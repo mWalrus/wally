@@ -17,23 +17,26 @@ impl Config {
             border: Border::new(1, [1., 0., 0., 1.], [0., 1., 0., 1.]),
             keybinds: HashMap::from([
                 (
-                    Keybind::new(KeyModifiers::ALT | KeyModifiers::SHIFT, keysyms::KEY_q),
+                    Keybind::new(KeyModifiers::SUPER | KeyModifiers::SHIFT, keysyms::KEY_q),
                     Action::Quit,
                 ),
                 (
-                    Keybind::new(KeyModifiers::ALT, keysyms::KEY_l),
+                    Keybind::new(KeyModifiers::SUPER, keysyms::KEY_l),
                     Action::NextWorkspace,
                 ),
                 (
-                    Keybind::new(KeyModifiers::ALT, keysyms::KEY_h),
+                    Keybind::new(KeyModifiers::SUPER, keysyms::KEY_h),
                     Action::PrevWorkspace,
                 ),
                 (
-                    Keybind::new(KeyModifiers::ALT | KeyModifiers::SHIFT, keysyms::KEY_Return),
+                    Keybind::new(
+                        KeyModifiers::SUPER | KeyModifiers::SHIFT,
+                        keysyms::KEY_Return,
+                    ),
                     Action::Spawn("alacritty".into()),
                 ),
                 (
-                    Keybind::new(KeyModifiers::ALT, keysyms::KEY_p),
+                    Keybind::new(KeyModifiers::SUPER, keysyms::KEY_p),
                     Action::Spawn("dmenu_run".into()),
                 ),
             ]),
