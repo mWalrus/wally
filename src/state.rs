@@ -22,7 +22,7 @@ use smithay::{
     },
 };
 
-use crate::{config::Config, types::keybind::Action, CalloopData};
+use crate::{config::Config, ssd::Border, types::keybind::Action, CalloopData};
 
 // TODO: add config
 pub struct Wally {
@@ -52,18 +52,18 @@ impl Wally {
     pub fn new(event_loop: &mut EventLoop<CalloopData>, display: Display<Self>) -> Self {
         let start_time = std::time::Instant::now();
 
-        let dh = display.handle();
+        let display_handle = display.handle();
 
-        let compositor_state = CompositorState::new::<Self>(&dh);
-        let xdg_shell_state = XdgShellState::new::<Self>(&dh);
-        let xdg_decoration_state = XdgDecorationState::new::<Self>(&dh);
-        let shm_state = ShmState::new::<Self>(&dh, vec![]);
-        let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
+        let compositor_state = CompositorState::new::<Self>(&display_handle);
+        let xdg_shell_state = XdgShellState::new::<Self>(&display_handle);
+        let xdg_decoration_state = XdgDecorationState::new::<Self>(&display_handle);
+        let shm_state = ShmState::new::<Self>(&display_handle, vec![]);
+        let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&display_handle);
         let mut seat_state = SeatState::new();
-        let data_device_state = DataDeviceState::new::<Self>(&dh);
+        let data_device_state = DataDeviceState::new::<Self>(&display_handle);
         let popups = PopupManager::default();
 
-        let mut seat: Seat<Self> = seat_state.new_wl_seat(&dh, "wally-seat");
+        let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, "wally-seat");
 
         // Notify clients that we have a keyboard, for the sake of the example we assume that keyboard is always present.
         // You may want to track keyboard hot-plug in real compositor.
@@ -78,16 +78,17 @@ impl Wally {
         // Windows get a position and stacking order through mapping.
         // Outputs become views of a part of the Space and can be rendered via Space::render_output.
         let space = Space::default();
+        let config = Config::new();
 
-        let socket_name = Self::init_wayland_listener(display, event_loop);
+        let socket_name = Self::init_wayland_listener(&config, display, event_loop);
 
         // Get the loop signal, used to stop the event loop
         let loop_signal = event_loop.get_signal();
 
         Self {
-            config: Config::new(),
+            config,
             start_time,
-            display_handle: dh,
+            display_handle,
 
             space,
             loop_signal,
@@ -106,6 +107,7 @@ impl Wally {
     }
 
     fn init_wayland_listener(
+        config: &Config,
         display: Display<Wally>,
         event_loop: &mut EventLoop<CalloopData>,
     ) -> OsString {
@@ -118,6 +120,8 @@ impl Wally {
 
         let loop_handle = event_loop.handle();
 
+        let border = config.border.clone();
+
         loop_handle
             .insert_source(listening_socket, move |client_stream, _, state| {
                 // Inside the callback, you should insert the client into the display.
@@ -125,7 +129,7 @@ impl Wally {
                 // You may also associate some data with the client when inserting the client.
                 state
                     .display_handle
-                    .insert_client(client_stream, Arc::new(ClientState::default()))
+                    .insert_client(client_stream, Arc::new(ClientState::new(border.clone())))
                     .unwrap();
             })
             .expect("Failed to init the wayland event source.");
@@ -173,9 +177,18 @@ impl Wally {
     }
 }
 
-#[derive(Default)]
 pub struct ClientState {
+    pub border: Border,
     pub compositor_state: CompositorClientState,
+}
+
+impl ClientState {
+    pub fn new(border: Border) -> Self {
+        Self {
+            border,
+            compositor_state: CompositorClientState::default(),
+        }
+    }
 }
 
 impl ClientData for ClientState {

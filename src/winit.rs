@@ -23,7 +23,7 @@ pub fn init(
     let display_handle = &mut data.display_handle;
     let state = &mut data.state;
 
-    let (mut backend, winit_event_loop) = winit::init()?;
+    let (mut backend, winit_event_loop) = winit::init::<GlesRenderer>()?;
 
     let mode = Mode {
         size: backend.window_size(),

@@ -1,6 +1,5 @@
 use bitflags::bitflags;
 use smithay::input::keyboard::{Keysym, ModifiersState};
-use tracing::info;
 
 bitflags! {
     #[repr(transparent)]
@@ -16,7 +15,6 @@ bitflags! {
     }
 }
 
-// usch?????????
 impl From<&ModifiersState> for KeyModifiers {
     fn from(modifiers_state: &ModifiersState) -> Self {
         let mut modifiers = KeyModifiers::NONE;
