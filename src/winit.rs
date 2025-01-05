@@ -58,7 +58,7 @@ pub fn init(
     // TODO: clone and map outputs to each workspace instead
     state.space.map_output(&output, (0, 0));
 
-    let mut damage_tracker = OutputDamageTracker::from_output(&output);
+    let mut output_damage_tracker = OutputDamageTracker::from_output(&output);
 
     std::env::set_var("WAYLAND_DISPLAY", &state.socket_name);
 
@@ -92,17 +92,17 @@ pub fn init(
                     let border_thickness = CONFIG.border_thickness as i32;
 
                     for window in state.space.elements() {
-                        let Some(mut geo) = state.space.element_geometry(window) else {
+                        let Some(mut geometry) = state.space.element_geometry(window) else {
                             continue;
                         };
 
-                        geo.size += (border_thickness * 2, border_thickness * 2).into();
+                        geometry.size += (border_thickness * 2, border_thickness * 2).into();
 
-                        geo.loc -= (border_thickness, border_thickness).into();
+                        geometry.loc -= (border_thickness, border_thickness).into();
 
                         elements.push(CustomRenderElement::from(BorderShader::element(
                             backend.renderer(),
-                            geo,
+                            geometry,
                             CONFIG.border_color_focused,
                             CONFIG.border_thickness,
                         )));
@@ -110,7 +110,7 @@ pub fn init(
 
                     let age = backend.buffer_age().unwrap_or(0);
 
-                    damage_tracker
+                    output_damage_tracker
                         .render_output(backend.renderer(), age, &elements, [0.0, 0.0, 0.0, 1.0])
                         .unwrap();
 
@@ -121,7 +121,7 @@ pub fn init(
                         age,
                         [&state.space],
                         elements.as_slice(),
-                        &mut damage_tracker,
+                        &mut output_damage_tracker,
                         [0.0, 0.0, 0.0, 1.0],
                     )
                     .unwrap();

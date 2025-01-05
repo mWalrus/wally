@@ -49,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let display: Display<WallyState> = Display::new()?;
     let display_handle = display.handle();
+
     let state = WallyState::new(&mut event_loop, display);
 
     let mut data = CalloopData {
