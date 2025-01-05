@@ -1,5 +1,6 @@
 mod handlers;
 
+mod backend;
 mod config;
 mod element;
 mod input;
@@ -35,37 +36,31 @@ enum Backend {
     Udev,
 }
 
-pub struct CalloopData {
-    state: WallyState,
-    display_handle: DisplayHandle,
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     util::log::init(args.log);
 
-    let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
-
-    let display: Display<WallyState> = Display::new()?;
-    let display_handle = display.handle();
-
-    let state = WallyState::new(&mut event_loop, display);
-
-    let mut data = CalloopData {
-        state,
-        display_handle,
-    };
-
-    crate::winit::init(&mut event_loop, &mut data)?;
+    crate::winit::init()?;
 
     if let Some(command) = args.spawn {
         std::process::Command::new(command).spawn().ok();
     }
 
-    event_loop.run(None, &mut data, move |_| {
-        // wally is running
-    })?;
+    // event_loop.run(None, &mut data, move |_| {
+    //     // wally is running
+    // })?;
 
     Ok(())
 }
+
+// let output = state.space.outputs().next().unwrap().clone();
+// state.space.map_output(&output, (0, 0));
+
+// let mode = Mode {
+//     size,
+//     refresh: 60_000,
+// };
+
+// output.change_current_state(Some(mode), None, None, None);
+// output.set_preferred(mode);

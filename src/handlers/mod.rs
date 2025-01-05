@@ -1,6 +1,7 @@
 mod compositor;
 mod xdg_shell;
 
+use crate::backend::Backend;
 use crate::WallyState;
 
 //
@@ -18,12 +19,12 @@ use smithay::wayland::selection::data_device::{
 use smithay::wayland::selection::SelectionHandler;
 use smithay::{delegate_data_device, delegate_output, delegate_seat};
 
-impl SeatHandler for WallyState {
+impl<BackendData: Backend> SeatHandler for WallyState<BackendData> {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
     type TouchFocus = WlSurface;
 
-    fn seat_state(&mut self) -> &mut SeatState<WallyState> {
+    fn seat_state(&mut self) -> &mut SeatState<WallyState<BackendData>> {
         &mut self.seat_state
     }
 
@@ -41,30 +42,30 @@ impl SeatHandler for WallyState {
     }
 }
 
-delegate_seat!(WallyState);
+delegate_seat!(@<BackendData: Backend + 'static> WallyState<BackendData>);
 
 //
 // Wl Data Device
 //
 
-impl SelectionHandler for WallyState {
+impl<BackendData: Backend> SelectionHandler for WallyState<BackendData> {
     type SelectionUserData = ();
 }
 
-impl DataDeviceHandler for WallyState {
+impl<BackendData: Backend> DataDeviceHandler for WallyState<BackendData> {
     fn data_device_state(&self) -> &DataDeviceState {
         &self.data_device_state
     }
 }
 
-impl ClientDndGrabHandler for WallyState {}
-impl ServerDndGrabHandler for WallyState {}
+impl<BackendData: Backend> ClientDndGrabHandler for WallyState<BackendData> {}
+impl<BackendData: Backend> ServerDndGrabHandler for WallyState<BackendData> {}
 
-delegate_data_device!(WallyState);
+delegate_data_device!(@<BackendData: Backend + 'static> WallyState<BackendData>);
 
 //
 // Wl Output & Xdg Output
 //
 
-impl OutputHandler for WallyState {}
-delegate_output!(WallyState);
+impl<BackendData: Backend> OutputHandler for WallyState<BackendData> {}
+delegate_output!(@<BackendData: Backend + 'static> WallyState<BackendData>);

@@ -11,9 +11,9 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::{state::WallyState, types::keybind::Keybind};
+use crate::{backend::Backend, config::CONFIG, state::WallyState, types::keybind::Keybind};
 
-impl WallyState {
+impl<BackendData: Backend> WallyState<BackendData> {
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         match event {
             InputEvent::Keyboard { event, .. } => {
@@ -28,20 +28,21 @@ impl WallyState {
                     event.state(),
                     serial,
                     time,
-                    |state, modifiers_state, keysym_handle| {
+                    |_state, modifiers_state, keysym_handle| {
                         if let KeyState::Pressed = event.state() {
                             // we should be able to get away with this since we wont have combo-binds
                             let raw_syms = keysym_handle.raw_syms();
                             let keysym = raw_syms.into_iter().next().unwrap();
                             let keybind = Keybind::new(modifiers_state, keysym);
 
-                            if let Some(action) = state.config.keybinds.get(&keybind) {
+                            if let Some(action) = CONFIG.keybinds.get(&keybind) {
                                 return FilterResult::Intercept(action.clone());
                             }
                         }
                         FilterResult::Forward
                     },
                 ) {
+                    tracing::info!(action = ?action, "Got action!");
                     self.handle_action(action);
                 }
             }

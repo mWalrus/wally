@@ -1,10 +1,13 @@
-use std::{ffi::OsString, sync::Arc};
+use std::{
+    ffi::OsString,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
     input::{Seat, SeatState},
     reexports::{
-        calloop::{generic::Generic, EventLoop, Interest, LoopSignal, Mode, PostAction},
+        calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
             backend::{ClientData, ClientId, DisconnectReason},
             protocol::wl_surface::WlSurface,
@@ -22,18 +25,18 @@ use smithay::{
     },
 };
 
-use crate::{config::Config, types::keybind::Action, CalloopData};
+use crate::{backend::Backend, config::Config, types::keybind::Action};
 
-pub struct WallyState {
-    pub config: Config,
-
+#[derive(Debug)]
+pub struct WallyState<BackendData: Backend + 'static> {
+    pub running: AtomicBool,
+    pub backend_data: BackendData,
     pub clock: Clock<Monotonic>,
     pub start_time: std::time::Instant,
     pub socket_name: OsString,
     pub display_handle: DisplayHandle,
 
     pub space: Space<Window>,
-    pub loop_signal: LoopSignal,
 
     // Smithay State
     pub compositor_state: CompositorState,
@@ -41,15 +44,19 @@ pub struct WallyState {
     pub xdg_decoration_state: XdgDecorationState,
     pub shm_state: ShmState,
     pub output_manager_state: OutputManagerState,
-    pub seat_state: SeatState<WallyState>,
+    pub seat_state: SeatState<WallyState<BackendData>>,
     pub data_device_state: DataDeviceState,
     pub popups: PopupManager,
 
-    pub seat: Seat<Self>,
+    pub seat: Seat<WallyState<BackendData>>,
 }
 
-impl WallyState {
-    pub fn new(event_loop: &mut EventLoop<CalloopData>, display: Display<Self>) -> Self {
+impl<BackendData: Backend> WallyState<BackendData> {
+    pub fn new(
+        display: Display<WallyState<BackendData>>,
+        handle: LoopHandle<'static, WallyState<BackendData>>,
+        backend_data: BackendData,
+    ) -> Self {
         let start_time = std::time::Instant::now();
 
         let display_handle = display.handle();
@@ -78,21 +85,17 @@ impl WallyState {
         // Windows get a position and stacking order through mapping.
         // Outputs become views of a part of the Space and can be rendered via Space::render_output.
         let space = Space::default();
-        let config = Config::new();
 
-        let socket_name = Self::init_wayland_listener(&config, display, event_loop);
-
-        // Get the loop signal, used to stop the event loop
-        let loop_signal = event_loop.get_signal();
+        let socket_name = Self::init_wayland_listener(display, handle);
 
         Self {
-            config,
+            running: AtomicBool::new(true),
+            backend_data,
             clock: Clock::new(),
             start_time,
             display_handle,
 
             space,
-            loop_signal,
             socket_name,
 
             compositor_state,
@@ -108,9 +111,8 @@ impl WallyState {
     }
 
     fn init_wayland_listener(
-        config: &Config,
-        display: Display<WallyState>,
-        event_loop: &mut EventLoop<CalloopData>,
+        display: Display<WallyState<BackendData>>,
+        loop_handle: LoopHandle<'static, WallyState<BackendData>>,
     ) -> OsString {
         // Creates a new listening socket, automatically choosing the next available `wayland` socket name.
         let listening_socket = ListeningSocketSource::new_auto().unwrap();
@@ -118,8 +120,6 @@ impl WallyState {
         // Get the name of the listening socket.
         // Clients will connect to this socket.
         let socket_name = listening_socket.socket_name().to_os_string();
-
-        let loop_handle = event_loop.handle();
 
         loop_handle
             .insert_source(listening_socket, move |client_stream, _, state| {
@@ -140,10 +140,7 @@ impl WallyState {
                 |_, display, state| {
                     // Safety: we don't drop the display
                     unsafe {
-                        display
-                            .get_mut()
-                            .dispatch_clients(&mut state.state)
-                            .unwrap();
+                        display.get_mut().dispatch_clients(state).unwrap();
                     }
                     Ok(PostAction::Continue)
                 },
