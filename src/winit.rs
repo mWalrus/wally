@@ -145,15 +145,21 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
         draw(&mut state, &mut output_damage_tracker, &output);
 
+        // dispatch all pending events accumulated during the draw routine
+        // so that they will be processed during the next cycle of the event loop
         if event_loop
             .dispatch(Some(Duration::from_millis(1)), &mut state)
             .is_err()
         {
+            // if we fail we signal for the event loop to halt
             state.running.store(false, Ordering::SeqCst);
         } else {
+            // otherwise we refresh the space, cleaning up some internals and update client state...
             state.space.refresh();
+            // ...as well as clean up some internal popup resources...
             state.popups.cleanup();
 
+            // ...and lastly we flush outgoing buffers into their respective sockets
             display_handle.flush_clients().unwrap();
         }
     }
