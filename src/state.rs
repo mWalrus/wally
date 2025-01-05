@@ -11,7 +11,7 @@ use smithay::{
             Display, DisplayHandle,
         },
     },
-    utils::{Logical, Point},
+    utils::{Clock, Logical, Monotonic, Point},
     wayland::{
         compositor::{CompositorClientState, CompositorState},
         output::OutputManagerState,
@@ -22,11 +22,12 @@ use smithay::{
     },
 };
 
-use crate::{config::Config, ssd::Border, types::keybind::Action, CalloopData};
+use crate::{config::Config, types::keybind::Action, CalloopData};
 
 pub struct WallyState {
     pub config: Config,
 
+    pub clock: Clock<Monotonic>,
     pub start_time: std::time::Instant,
     pub socket_name: OsString,
     pub display_handle: DisplayHandle,
@@ -86,6 +87,7 @@ impl WallyState {
 
         Self {
             config,
+            clock: Clock::new(),
             start_time,
             display_handle,
 
@@ -119,8 +121,6 @@ impl WallyState {
 
         let loop_handle = event_loop.handle();
 
-        let border = config.border.clone();
-
         loop_handle
             .insert_source(listening_socket, move |client_stream, _, state| {
                 // Inside the callback, you should insert the client into the display.
@@ -128,7 +128,7 @@ impl WallyState {
                 // You may also associate some data with the client when inserting the client.
                 state
                     .display_handle
-                    .insert_client(client_stream, Arc::new(ClientState::new(border.clone())))
+                    .insert_client(client_stream, Arc::new(ClientState::new()))
                     .unwrap();
             })
             .expect("Failed to init the wayland event source.");
@@ -177,14 +177,12 @@ impl WallyState {
 }
 
 pub struct ClientState {
-    pub border: Border,
     pub compositor_state: CompositorClientState,
 }
 
 impl ClientState {
-    pub fn new(border: Border) -> Self {
+    pub fn new() -> Self {
         Self {
-            border,
             compositor_state: CompositorClientState::default(),
         }
     }

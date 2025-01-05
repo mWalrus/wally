@@ -1,7 +1,9 @@
 mod handlers;
 
 mod config;
+mod element;
 mod input;
+mod render;
 mod ssd;
 mod state;
 mod types;

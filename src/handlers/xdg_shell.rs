@@ -19,7 +19,7 @@ use smithay::{
     },
 };
 
-use crate::WallyState;
+use crate::{config::CONFIG, WallyState};
 
 impl XdgShellHandler for WallyState {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -27,8 +27,10 @@ impl XdgShellHandler for WallyState {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        let border_thickness = CONFIG.border_thickness as i32;
         let window = Window::new_wayland_window(surface);
-        self.space.map_element(window, (0, 0), true);
+        self.space
+            .map_element(window, (border_thickness, border_thickness), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {

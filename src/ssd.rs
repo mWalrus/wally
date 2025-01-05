@@ -1,73 +1,75 @@
+use anyhow::Result;
 use smithay::{
     backend::renderer::{
-        element::{
-            solid::{SolidColorBuffer, SolidColorRenderElement},
-            AsRenderElements, Kind,
-        },
-        Renderer,
+        element::Kind,
+        gles::{element::PixelShaderElement, GlesPixelProgram, GlesRenderer, Uniform, UniformName},
     },
-    utils::{Physical, Point, Scale},
+    utils::{Logical, Rectangle},
 };
 
-#[derive(Clone, Debug)]
-pub struct Border {
-    size: u8,
-    is_focused: bool,
-    color_focused: SolidColorBuffer,
-    color_unfocused: SolidColorBuffer,
-}
+const BORDER_SHADER: &str = include_str!("shaders/border.frag");
 
-impl Border {
-    pub fn new(size: u8, color_focused: [f32; 4], color_unfocused: [f32; 4]) -> Self {
-        let mut focused = SolidColorBuffer::default();
-        let mut unfocused = SolidColorBuffer::default();
+pub struct BorderShader(pub GlesPixelProgram);
 
-        focused.set_color(color_focused);
-        unfocused.set_color(color_unfocused);
+impl BorderShader {
+    pub fn element(
+        renderer: &GlesRenderer,
+        geometry: Rectangle<i32, Logical>,
+        color: u32,
+        thickness: u8,
+    ) -> PixelShaderElement {
+        let program = renderer
+            .egl_context()
+            .user_data()
+            .get::<BorderShader>()
+            .unwrap()
+            .0
+            .clone();
 
-        Self {
-            size,
-            is_focused: false,
-            color_focused: focused,
-            color_unfocused: unfocused,
-        }
-    }
+        let point = geometry.size.to_point();
 
-    pub fn set_focus(&mut self) {
-        self.is_focused = true;
-    }
+        let red = color >> 16 & 255;
+        let green = color >> 8 & 255;
+        let blue = color & 255;
 
-    pub fn remove_focus(&mut self) {
-        self.is_focused = false;
-    }
-}
-
-impl<R: Renderer> AsRenderElements<R> for Border {
-    type RenderElement = SolidColorRenderElement;
-
-    fn render_elements<C: From<Self::RenderElement>>(
-        &self,
-        _renderer: &mut R,
-        location: Point<i32, Physical>,
-        scale: Scale<f64>,
-        alpha: f32,
-    ) -> Vec<C> {
-        let buffer = if self.is_focused {
-            &self.color_focused
-        } else {
-            &self.color_unfocused
-        };
-
-        let offset = self.size as i32;
-        let location = Point::from((location.x - offset, location.y - offset));
-
-        vec![SolidColorRenderElement::from_buffer(
-            buffer,
-            location,
-            scale,
-            alpha,
+        PixelShaderElement::new(
+            program,
+            geometry,
+            None,
+            1.0,
+            vec![
+                Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
+                Uniform::new("border_color", (red as f32, green as f32, blue as f32)),
+                Uniform::new("border_thickness", thickness as f32),
+            ],
             Kind::Unspecified,
         )
-        .into()]
     }
+}
+
+pub fn compile_shaders(renderer: &mut GlesRenderer) -> Result<()> {
+    let border_shader = renderer.compile_custom_pixel_shader(
+        BORDER_SHADER,
+        &[
+            UniformName::new(
+                "u_resolution",
+                smithay::backend::renderer::gles::UniformType::_2f,
+            ),
+            UniformName::new(
+                "border_color",
+                smithay::backend::renderer::gles::UniformType::_3f,
+            ),
+            UniformName::new(
+                "border_thickness",
+                smithay::backend::renderer::gles::UniformType::_1f,
+            ),
+        ],
+    )?;
+
+    renderer
+        .egl_context()
+        .user_data()
+        .insert_if_missing(|| BorderShader(border_shader));
+
+    Ok(())
 }

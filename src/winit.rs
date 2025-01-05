@@ -2,10 +2,7 @@ use std::time::Duration;
 
 use smithay::{
     backend::{
-        renderer::{
-            damage::OutputDamageTracker, element::surface::WaylandSurfaceRenderElement,
-            gles::GlesRenderer,
-        },
+        renderer::{damage::OutputDamageTracker, gles::GlesRenderer},
         winit::{self, WinitEvent},
     },
     desktop::space::render_output,
@@ -14,7 +11,12 @@ use smithay::{
     utils::{Rectangle, Transform},
 };
 
-use crate::{CalloopData, WallyState};
+use crate::{
+    config::CONFIG,
+    render::CustomRenderElement,
+    ssd::{self, BorderShader},
+    CalloopData, WallyState,
+};
 
 pub fn init(
     event_loop: &mut EventLoop<CalloopData>,
@@ -25,27 +27,32 @@ pub fn init(
 
     let (mut backend, winit_event_loop) = winit::init::<GlesRenderer>()?;
 
+    ssd::compile_shaders(backend.renderer())?;
+
     let mode = Mode {
         size: backend.window_size(),
         refresh: 60_000,
     };
 
-    let output = Output::new(
-        "winit".to_string(),
-        PhysicalProperties {
-            size: (0, 0).into(),
-            subpixel: Subpixel::Unknown,
-            make: "Smithay".into(),
-            model: "Winit".into(),
-        },
-    );
+    let output_properties = PhysicalProperties {
+        size: (0, 0).into(),
+        subpixel: Subpixel::Unknown,
+        make: "Wally".into(),
+        model: "Winit".into(),
+    };
+
+    let output = Output::new("winit".to_string(), output_properties);
+
+    // Clients can access the global objects to get the physical properties and output state.
     let _global = output.create_global::<WallyState>(display_handle);
+
     output.change_current_state(
         Some(mode),
         Some(Transform::Flipped180),
         None,
         Some((0, 0).into()),
     );
+
     output.set_preferred(mode);
 
     // TODO: clone and map outputs to each workspace instead
@@ -76,24 +83,51 @@ pub fn init(
                 WinitEvent::Input(event) => state.process_input_event(event),
                 WinitEvent::Redraw => {
                     let size = backend.window_size();
-                    let damage = Rectangle::from_loc_and_size((0, 0), size);
+                    let damage = Rectangle::from_size(size);
 
                     backend.bind().unwrap();
-                    render_output::<_, WaylandSurfaceRenderElement<GlesRenderer>, _, _>(
+
+                    let mut elements = Vec::<CustomRenderElement>::new();
+
+                    let border_thickness = CONFIG.border_thickness as i32;
+
+                    for window in state.space.elements() {
+                        let Some(mut geo) = state.space.element_geometry(window) else {
+                            continue;
+                        };
+
+                        geo.size += (border_thickness * 2, border_thickness * 2).into();
+
+                        geo.loc -= (border_thickness, border_thickness).into();
+
+                        elements.push(CustomRenderElement::from(BorderShader::element(
+                            backend.renderer(),
+                            geo,
+                            CONFIG.border_color_focused,
+                            CONFIG.border_thickness,
+                        )));
+                    }
+
+                    let age = backend.buffer_age().unwrap_or(0);
+
+                    damage_tracker
+                        .render_output(backend.renderer(), age, &elements, [0.0, 0.0, 0.0, 1.0])
+                        .unwrap();
+
+                    render_output::<_, CustomRenderElement, _, _>(
                         &output,
                         backend.renderer(),
-                        1.0, // alpha
-                        0,   // age (???)
+                        1.0,
+                        age,
                         [&state.space],
-                        &[], // custom elements
+                        elements.as_slice(),
                         &mut damage_tracker,
-                        [0.1, 0.1, 0.1, 1.0], // clear color (???)
+                        [0.0, 0.0, 0.0, 1.0],
                     )
                     .unwrap();
+
                     backend.submit(Some(&[damage])).unwrap();
 
-                    // elements/windows in this case are actual application windows mapped
-                    // to the space
                     state.space.elements().for_each(|window| {
                         window.send_frame(
                             &output,
@@ -105,9 +139,9 @@ pub fn init(
 
                     state.space.refresh();
                     state.popups.cleanup();
+
                     let _ = display.flush_clients();
 
-                    // request to redraw the winit window the compositor is running in
                     backend.window().request_redraw();
                 }
                 WinitEvent::CloseRequested => {
