@@ -141,6 +141,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
         if let PumpStatus::Exit(_) = status {
             state.running.store(false, Ordering::SeqCst);
+            break;
         }
 
         draw(&mut state, &mut output_damage_tracker, &output);
