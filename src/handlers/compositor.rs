@@ -1,4 +1,4 @@
-use crate::{state::ClientState, Wally};
+use crate::{state::ClientState, WallyState};
 use smithay::{
     backend::renderer::utils::on_commit_buffer_handler,
     delegate_compositor, delegate_shm,
@@ -18,7 +18,7 @@ use smithay::{
 
 use super::xdg_shell;
 
-impl CompositorHandler for Wally {
+impl CompositorHandler for WallyState {
     fn compositor_state(&mut self) -> &mut CompositorState {
         &mut self.compositor_state
     }
@@ -47,15 +47,15 @@ impl CompositorHandler for Wally {
     }
 }
 
-impl BufferHandler for Wally {
+impl BufferHandler for WallyState {
     fn buffer_destroyed(&mut self, _buffer: &wl_buffer::WlBuffer) {}
 }
 
-impl ShmHandler for Wally {
+impl ShmHandler for WallyState {
     fn shm_state(&self) -> &ShmState {
         &self.shm_state
     }
 }
 
-delegate_compositor!(Wally);
-delegate_shm!(Wally);
+delegate_compositor!(WallyState);
+delegate_shm!(WallyState);

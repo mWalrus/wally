@@ -19,9 +19,9 @@ use smithay::{
     },
 };
 
-use crate::Wally;
+use crate::WallyState;
 
-impl XdgShellHandler for Wally {
+impl XdgShellHandler for WallyState {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
         &mut self.xdg_shell_state
     }
@@ -69,7 +69,7 @@ impl XdgShellHandler for Wally {
 }
 
 // Xdg Shell
-delegate_xdg_shell!(Wally);
+delegate_xdg_shell!(WallyState);
 
 /// Should be called on `WlSurface::commit`
 pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: &WlSurface) {
@@ -110,7 +110,7 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
     }
 }
 
-impl Wally {
+impl WallyState {
     fn unconstrain_popup(&self, popup: &PopupSurface) {
         let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
             return;
@@ -139,7 +139,7 @@ impl Wally {
     }
 }
 
-impl XdgDecorationHandler for Wally {
+impl XdgDecorationHandler for WallyState {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
         toplevel.with_pending_state(|state| state.decoration_mode = Some(Mode::ServerSide));
         toplevel.send_configure();
@@ -150,4 +150,4 @@ impl XdgDecorationHandler for Wally {
     fn unset_mode(&mut self, _toplevel: ToplevelSurface) {}
 }
 
-delegate_xdg_decoration!(Wally);
+delegate_xdg_decoration!(WallyState);

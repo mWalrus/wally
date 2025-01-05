@@ -1,7 +1,7 @@
 mod compositor;
 mod xdg_shell;
 
-use crate::Wally;
+use crate::WallyState;
 
 //
 // Wl Seat
@@ -12,21 +12,27 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::Resource;
 use smithay::wayland::output::OutputHandler;
 use smithay::wayland::selection::data_device::{
-    set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+    set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState,
+    ServerDndGrabHandler,
 };
 use smithay::wayland::selection::SelectionHandler;
 use smithay::{delegate_data_device, delegate_output, delegate_seat};
 
-impl SeatHandler for Wally {
+impl SeatHandler for WallyState {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
     type TouchFocus = WlSurface;
 
-    fn seat_state(&mut self) -> &mut SeatState<Wally> {
+    fn seat_state(&mut self) -> &mut SeatState<WallyState> {
         &mut self.seat_state
     }
 
-    fn cursor_image(&mut self, _seat: &Seat<Self>, _image: smithay::input::pointer::CursorImageStatus) {}
+    fn cursor_image(
+        &mut self,
+        _seat: &Seat<Self>,
+        _image: smithay::input::pointer::CursorImageStatus,
+    ) {
+    }
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
         let dh = &self.display_handle;
@@ -35,30 +41,30 @@ impl SeatHandler for Wally {
     }
 }
 
-delegate_seat!(Wally);
+delegate_seat!(WallyState);
 
 //
 // Wl Data Device
 //
 
-impl SelectionHandler for Wally {
+impl SelectionHandler for WallyState {
     type SelectionUserData = ();
 }
 
-impl DataDeviceHandler for Wally {
+impl DataDeviceHandler for WallyState {
     fn data_device_state(&self) -> &DataDeviceState {
         &self.data_device_state
     }
 }
 
-impl ClientDndGrabHandler for Wally {}
-impl ServerDndGrabHandler for Wally {}
+impl ClientDndGrabHandler for WallyState {}
+impl ServerDndGrabHandler for WallyState {}
 
-delegate_data_device!(Wally);
+delegate_data_device!(WallyState);
 
 //
 // Wl Output & Xdg Output
 //
 
-impl OutputHandler for Wally {}
-delegate_output!(Wally);
+impl OutputHandler for WallyState {}
+delegate_output!(WallyState);

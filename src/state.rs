@@ -24,8 +24,7 @@ use smithay::{
 
 use crate::{config::Config, ssd::Border, types::keybind::Action, CalloopData};
 
-// TODO: add config
-pub struct Wally {
+pub struct WallyState {
     pub config: Config,
 
     pub start_time: std::time::Instant,
@@ -41,14 +40,14 @@ pub struct Wally {
     pub xdg_decoration_state: XdgDecorationState,
     pub shm_state: ShmState,
     pub output_manager_state: OutputManagerState,
-    pub seat_state: SeatState<Wally>,
+    pub seat_state: SeatState<WallyState>,
     pub data_device_state: DataDeviceState,
     pub popups: PopupManager,
 
     pub seat: Seat<Self>,
 }
 
-impl Wally {
+impl WallyState {
     pub fn new(event_loop: &mut EventLoop<CalloopData>, display: Display<Self>) -> Self {
         let start_time = std::time::Instant::now();
 
@@ -108,7 +107,7 @@ impl Wally {
 
     fn init_wayland_listener(
         config: &Config,
-        display: Display<Wally>,
+        display: Display<WallyState>,
         event_loop: &mut EventLoop<CalloopData>,
     ) -> OsString {
         // Creates a new listening socket, automatically choosing the next available `wayland` socket name.

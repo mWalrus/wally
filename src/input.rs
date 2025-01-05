@@ -11,9 +11,9 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::{state::Wally, types::keybind::Keybind};
+use crate::{state::WallyState, types::keybind::Keybind};
 
-impl Wally {
+impl WallyState {
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         match event {
             InputEvent::Keyboard { event, .. } => {

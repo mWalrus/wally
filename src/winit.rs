@@ -14,7 +14,7 @@ use smithay::{
     utils::{Rectangle, Transform},
 };
 
-use crate::{CalloopData, Wally};
+use crate::{CalloopData, WallyState};
 
 pub fn init(
     event_loop: &mut EventLoop<CalloopData>,
@@ -39,7 +39,7 @@ pub fn init(
             model: "Winit".into(),
         },
     );
-    let _global = output.create_global::<Wally>(display_handle);
+    let _global = output.create_global::<WallyState>(display_handle);
     output.change_current_state(
         Some(mode),
         Some(Transform::Flipped180),

@@ -14,7 +14,7 @@ use smithay::reexports::{
     wayland_server::{Display, DisplayHandle},
 };
 
-use state::Wally;
+use state::WallyState;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -34,7 +34,7 @@ enum Backend {
 }
 
 pub struct CalloopData {
-    state: Wally,
+    state: WallyState,
     display_handle: DisplayHandle,
 }
 
@@ -45,9 +45,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
 
-    let display: Display<Wally> = Display::new()?;
+    let display: Display<WallyState> = Display::new()?;
     let display_handle = display.handle();
-    let state = Wally::new(&mut event_loop, display);
+    let state = WallyState::new(&mut event_loop, display);
 
     let mut data = CalloopData {
         state,
