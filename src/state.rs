@@ -5,7 +5,7 @@ use std::{
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
-    input::{Seat, SeatState},
+    input::{pointer::CursorImageStatus, Seat, SeatState},
     reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
@@ -25,7 +25,7 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, config::Config, types::keybind::Action};
+use crate::{backend::Backend, types::keybind::Action};
 
 #[derive(Debug)]
 pub struct WallyState<BackendData: Backend + 'static> {
@@ -39,6 +39,7 @@ pub struct WallyState<BackendData: Backend + 'static> {
     pub space: Space<Window>,
 
     // Smithay State
+    pub cursor_status: CursorImageStatus,
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
     pub xdg_decoration_state: XdgDecorationState,
@@ -98,6 +99,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
             space,
             socket_name,
 
+            cursor_status: CursorImageStatus::default_named(),
             compositor_state,
             xdg_shell_state,
             xdg_decoration_state,
