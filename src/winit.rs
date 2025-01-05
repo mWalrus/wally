@@ -143,64 +143,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
             state.running.store(false, Ordering::SeqCst);
         }
 
-        {
-            let backend = &mut state.backend_data.backend;
-
-            let size = backend.window_size();
-            let damage = Rectangle::from_size(size);
-
-            backend.bind().unwrap();
-
-            let mut elements = Vec::<CustomRenderElement>::new();
-
-            let border_thickness = CONFIG.border_thickness as i32;
-
-            for window in state.space.elements() {
-                let Some(mut geometry) = state.space.element_geometry(window) else {
-                    continue;
-                };
-
-                geometry.size += (border_thickness * 2, border_thickness * 2).into();
-
-                geometry.loc -= (border_thickness, border_thickness).into();
-
-                elements.push(CustomRenderElement::from(BorderShader::element(
-                    backend.renderer(),
-                    geometry,
-                    CONFIG.border_color_focused,
-                    CONFIG.border_thickness,
-                )));
-            }
-
-            let age = backend.buffer_age().unwrap_or(0);
-
-            output_damage_tracker
-                .render_output(backend.renderer(), age, &elements, [0.0, 0.0, 0.0, 1.0])
-                .unwrap();
-
-            render_output::<_, CustomRenderElement, _, _>(
-                &output,
-                backend.renderer(),
-                1.0,
-                age,
-                [&state.space],
-                elements.as_slice(),
-                &mut output_damage_tracker,
-                [0.0, 0.0, 0.0, 1.0],
-            )
-            .unwrap();
-
-            backend.submit(Some(&[damage])).unwrap();
-
-            state.space.elements().for_each(|window| {
-                window.send_frame(
-                    &output,
-                    state.start_time.elapsed(),
-                    Some(Duration::ZERO),
-                    |_, _| Some(output.clone()),
-                )
-            });
-        }
+        draw(&mut state, &mut output_damage_tracker, &output);
 
         if event_loop
             .dispatch(Some(Duration::from_millis(1)), &mut state)
@@ -216,4 +159,67 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn draw(
+    state: &mut WallyState<WinitData>,
+    damage_tracker: &mut OutputDamageTracker,
+    output: &Output,
+) {
+    let backend = &mut state.backend_data.backend;
+
+    let size = backend.window_size();
+    let damage = Rectangle::from_size(size);
+
+    backend.bind().unwrap();
+
+    let mut elements = Vec::<CustomRenderElement>::new();
+
+    let border_thickness = CONFIG.border_thickness as i32;
+
+    for window in state.space.elements() {
+        let Some(mut geometry) = state.space.element_geometry(window) else {
+            continue;
+        };
+
+        geometry.size += (border_thickness * 2, border_thickness * 2).into();
+
+        geometry.loc -= (border_thickness, border_thickness).into();
+
+        elements.push(CustomRenderElement::from(BorderShader::element(
+            backend.renderer(),
+            geometry,
+            CONFIG.border_color_focused,
+            CONFIG.border_thickness,
+        )));
+    }
+
+    let age = backend.buffer_age().unwrap_or(0);
+
+    damage_tracker
+        .render_output(backend.renderer(), age, &elements, [0.0, 0.0, 0.0, 1.0])
+        .unwrap();
+
+    render_output::<_, CustomRenderElement, _, _>(
+        &output,
+        backend.renderer(),
+        1.0,
+        age,
+        [&state.space],
+        elements.as_slice(),
+        damage_tracker,
+        [0.0, 0.0, 0.0, 1.0],
+    )
+    .unwrap();
+
+    backend.submit(Some(&[damage])).unwrap();
+
+    state.space.elements().for_each(|window| {
+        window.send_frame(
+            &output,
+            state.start_time.elapsed(),
+            Some(Duration::ZERO),
+            |_, _| Some(output.clone()),
+        )
+    });
 }
