@@ -1,12 +1,12 @@
 use std::{
     ffi::OsString,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{atomic::AtomicBool, Arc, Mutex},
 };
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
     input::{
-        pointer::{CursorImageStatus, PointerHandle},
+        pointer::{CursorImageAttributes, CursorImageStatus, PointerHandle},
         Seat, SeatState,
     },
     reexports::{
@@ -17,9 +17,9 @@ use smithay::{
             Display, DisplayHandle,
         },
     },
-    utils::{Clock, Logical, Monotonic, Point},
+    utils::{Clock, IsAlive, Logical, Monotonic, Physical, Point, Scale},
     wayland::{
-        compositor::{CompositorClientState, CompositorState},
+        compositor::{self, CompositorClientState, CompositorState},
         output::OutputManagerState,
         selection::data_device::DataDeviceState,
         shell::xdg::{decoration::XdgDecorationState, XdgShellState},
@@ -28,7 +28,7 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, types::keybind::Action};
+use crate::{backend::Backend, render::PointerElement, types::keybind::Action};
 
 #[derive(Debug)]
 pub struct WallyState<BackendData: Backend + 'static> {
@@ -75,7 +75,8 @@ impl<BackendData: Backend> WallyState<BackendData> {
         let data_device_state = DataDeviceState::new::<Self>(&display_handle);
         let popups = PopupManager::default();
 
-        let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, "wally-seat");
+        let seat_name = backend_data.seat_name();
+        let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
 
         // Notify clients that we have a keyboard, for the sake of the example we assume that keyboard is always present.
         // You may want to track keyboard hot-plug in real compositor.
@@ -155,6 +156,38 @@ impl<BackendData: Backend> WallyState<BackendData> {
             .unwrap();
 
         socket_name
+    }
+
+    pub fn get_cursor_data(&mut self, scale: Scale<f64>) -> (bool, Point<i32, Physical>) {
+        if let CursorImageStatus::Surface(ref surface) = self.cursor_status {
+            if !surface.alive() {
+                self.cursor_status = CursorImageStatus::default_named();
+            }
+        }
+
+        let cursor_pos = self.pointer.current_location();
+        let cursor_location = if let CursorImageStatus::Surface(ref surface) = self.cursor_status {
+            // the 'hotspot' is the part of the cursor image where the tip of the arrow
+            // is situated.
+            let hotspot = compositor::with_states(surface, |states| {
+                states
+                    .data_map
+                    .get::<Mutex<CursorImageAttributes>>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .hotspot
+            });
+            cursor_pos - hotspot.to_f64()
+        } else {
+            cursor_pos
+        };
+
+        let cursor_location = cursor_location.to_physical(scale).to_i32_round();
+
+        let cursor_visible = !matches!(self.cursor_status, CursorImageStatus::Surface(_));
+
+        (cursor_visible, cursor_location)
     }
 
     pub fn handle_action(&mut self, action: Action) {

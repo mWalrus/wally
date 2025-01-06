@@ -1,7 +1,4 @@
-use std::{
-    sync::{atomic::Ordering, Mutex},
-    time::Duration,
-};
+use std::{sync::atomic::Ordering, time::Duration};
 
 use crate::{
     config::CONFIG,
@@ -23,21 +20,15 @@ use smithay::{
     },
     delegate_dmabuf,
     desktop::space::render_output,
-    input::{
-        keyboard::LedState,
-        pointer::{CursorImageAttributes, CursorImageStatus},
-    },
+    input::keyboard::LedState,
     output::{Mode, Output, PhysicalProperties, Subpixel},
     reexports::{
         calloop::EventLoop,
         wayland_server::{protocol::wl_surface::WlSurface, Display},
         winit::platform::pump_events::PumpStatus,
     },
-    utils::{IsAlive, Rectangle, Scale, Transform},
-    wayland::{
-        compositor,
-        dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
-    },
+    utils::{Scale, Transform},
+    wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
 };
 use tracing::{error, info, warn};
 
@@ -152,10 +143,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
         .shm_state
         .update_formats(state.backend_data.backend.renderer().shm_formats());
 
-    // TODO: clone and map outputs to each workspace instead
     state.space.map_output(&output, (0, 0));
-
-    let mut output_damage_tracker = OutputDamageTracker::from_output(&output);
 
     std::env::set_var("WAYLAND_DISPLAY", &state.socket_name);
 
@@ -184,12 +172,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        draw(
-            &mut state,
-            &mut pointer_element,
-            &mut output_damage_tracker,
-            &output,
-        );
+        draw(&mut state, &mut pointer_element, &output);
 
         // dispatch all pending events accumulated during the draw routine
         // so that they will be processed during the next cycle of the event loop
@@ -213,58 +196,27 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn draw(
-    state: &mut WallyState<WinitData>,
-    pointer: &mut PointerElement,
-    damage_tracker: &mut OutputDamageTracker,
-    output: &Output,
-) {
+fn draw(state: &mut WallyState<WinitData>, pointer: &mut PointerElement, output: &Output) {
+    let output_scale = Scale::from(output.current_scale().fractional_scale());
+
+    let (cursor_visible, cursor_location) = state.get_cursor_data(output_scale);
+
+    pointer.set_status(state.cursor_status.clone());
+
     let backend = &mut state.backend_data.backend;
 
-    let size = backend.window_size();
-    let damage = Rectangle::from_size(size);
-
-    let mut elements = Vec::<CustomRenderElement>::new();
-
-    let current_output_fractional_scale = Scale::from(output.current_scale().fractional_scale());
+    let full_redraw = &mut state.backend_data.full_redraw;
+    *full_redraw = full_redraw.saturating_sub(1);
 
     let render_result = backend.bind().and_then(|_| {
-        if let CursorImageStatus::Surface(ref surface) = state.cursor_status {
-            if !surface.alive() {
-                state.cursor_status = CursorImageStatus::default_named();
-            }
-        }
+        let mut elements = Vec::<CustomRenderElement>::new();
 
-        let cursor_visible = !matches!(state.cursor_status, CursorImageStatus::Surface(_));
-
-        pointer.set_status(state.cursor_status.clone());
-
-        let cursor_hotspot = if let CursorImageStatus::Surface(ref surface) = state.cursor_status {
-            compositor::with_states(surface, |states| {
-                states
-                    .data_map
-                    .get::<Mutex<CursorImageAttributes>>()
-                    .unwrap()
-                    .lock()
-                    .unwrap()
-                    .hotspot
-            })
-        } else {
-            (0, 0).into()
-        };
-
-        let cursor_pos = state.pointer.current_location();
-
-        elements.extend(
-            pointer.render_elements(
-                backend.renderer(),
-                (cursor_pos - cursor_hotspot.to_f64())
-                    .to_physical(current_output_fractional_scale)
-                    .to_i32_round(),
-                current_output_fractional_scale,
-                1.0,
-            ),
-        );
+        elements.extend(pointer.render_elements(
+            backend.renderer(),
+            cursor_location,
+            output_scale,
+            1.0,
+        ));
 
         let border_thickness = CONFIG.border_thickness as i32;
 
@@ -285,21 +237,21 @@ fn draw(
             )));
         }
 
-        let age = backend.buffer_age().unwrap_or(0);
+        let age = if *full_redraw > 0 {
+            0
+        } else {
+            backend.buffer_age().unwrap_or(0)
+        };
 
-        damage_tracker
-            .render_output(backend.renderer(), age, &elements, [0.0, 0.0, 0.0, 1.0])
-            .unwrap();
-
-        render_output::<_, CustomRenderElement, _, _>(
+        render_output(
             &output,
             backend.renderer(),
-            1.0,
+            1.0, // alpha
             age,
             [&state.space],
             elements.as_slice(),
-            damage_tracker,
-            [0.0, 0.0, 0.0, 1.0],
+            &mut state.backend_data.damage_tracker,
+            [0.0, 0.0, 0.0, 1.0], // black reset color
         )
         .map_err(|err| match err {
             OutputDamageTrackerError::Rendering(err) => err.into(),
@@ -314,6 +266,8 @@ fn draw(
                     warn!("Failed to submit damage buffer: {err}");
                 }
             }
+
+            backend.window().set_cursor_visible(cursor_visible);
 
             state.space.elements().for_each(|window| {
                 window.send_frame(
