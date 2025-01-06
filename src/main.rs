@@ -21,7 +21,7 @@ struct Args {
     backend: Backend,
     #[arg(long, name = "LEVEL", default_value = "INFO")]
     log: Option<String>,
-    #[arg(long, name = "SPAWN")]
+    #[arg(long, name = "COMMAND")]
     spawn: Option<String>,
 }
 
