@@ -1,8 +1,7 @@
 use smithay::{
     backend::{
         egl::EGLDevice,
-        renderer::{damage::OutputDamageTracker, gles::GlesRenderer, ImportDma},
-        winit::WinitGraphicsBackend,
+        renderer::{gles::GlesRenderer, ImportDma},
     },
     input::keyboard::LedState,
     output::Output,
@@ -13,6 +12,8 @@ use tracing::warn;
 
 use crate::state::WallyState;
 
+pub mod winit;
+
 pub trait Backend {
     const HAS_RELATIVE_MOTION: bool = false;
     const HAS_GESTURES: bool = false;
@@ -20,27 +21,6 @@ pub trait Backend {
     fn reset_buffers(&mut self, output: &Output);
     fn early_import(&mut self, surface: &WlSurface);
     fn update_led_state(&mut self, led_state: LedState);
-}
-
-pub struct WinitData {
-    pub backend: WinitGraphicsBackend<GlesRenderer>,
-    pub damage_tracker: OutputDamageTracker,
-    pub dmabuf: BackendDmabufState,
-    pub full_redraw: u8,
-}
-
-impl Backend for WinitData {
-    fn seat_name(&self) -> String {
-        String::from("winit")
-    }
-
-    fn reset_buffers(&mut self, _output: &Output) {
-        self.full_redraw = 4;
-    }
-
-    fn early_import(&mut self, _surface: &WlSurface) {}
-
-    fn update_led_state(&mut self, _led_state: LedState) {}
 }
 
 pub struct BackendDmabufState {
@@ -58,10 +38,8 @@ impl BackendDmabufState {
         };
 
         let mut state = DmabufState::new();
-        let global = state.create_global_with_default_feedback::<WallyState<WinitData>>(
-            display_handle,
-            &feedback,
-        );
+        let global =
+            state.create_global_with_default_feedback::<WallyState<_>>(display_handle, &feedback);
 
         Self {
             state,
@@ -73,7 +51,7 @@ impl BackendDmabufState {
     pub fn new_no_feedback(renderer: &GlesRenderer, display_handle: &DisplayHandle) -> Self {
         let dmabuf_formats = renderer.dmabuf_formats();
         let mut state = DmabufState::new();
-        let global = state.create_global::<WallyState<WinitData>>(&display_handle, dmabuf_formats);
+        let global = state.create_global::<WallyState<_>>(&display_handle, dmabuf_formats);
         Self {
             state,
             global,

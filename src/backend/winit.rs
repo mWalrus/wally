@@ -1,7 +1,6 @@
 use std::{sync::atomic::Ordering, time::Duration};
 
 use crate::{
-    backend::{BackendDmabufState, WinitData},
     config::CONFIG,
     render::CustomRenderElement,
     ssd::{self, BorderShader},
@@ -13,18 +12,44 @@ use smithay::{
         renderer::{
             damage::OutputDamageTracker, gles::GlesRenderer, ImportDma, ImportEgl, ImportMemWl,
         },
-        winit::{self, WinitEvent},
+        winit::{self, WinitEvent, WinitGraphicsBackend},
     },
     delegate_dmabuf,
     desktop::space::render_output,
+    input::keyboard::LedState,
     output::{Mode, Output, PhysicalProperties, Subpixel},
     reexports::{
-        calloop::EventLoop, wayland_server::Display, winit::platform::pump_events::PumpStatus,
+        calloop::EventLoop,
+        wayland_server::{protocol::wl_surface::WlSurface, Display},
+        winit::platform::pump_events::PumpStatus,
     },
     utils::{Rectangle, Transform},
     wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
 };
 use tracing::info;
+
+use super::{Backend, BackendDmabufState};
+
+pub struct WinitData {
+    pub backend: WinitGraphicsBackend<GlesRenderer>,
+    pub damage_tracker: OutputDamageTracker,
+    pub dmabuf: BackendDmabufState,
+    pub full_redraw: u8,
+}
+
+impl Backend for WinitData {
+    fn seat_name(&self) -> String {
+        String::from("winit")
+    }
+
+    fn reset_buffers(&mut self, _output: &Output) {
+        self.full_redraw = 4;
+    }
+
+    fn early_import(&mut self, _surface: &WlSurface) {}
+
+    fn update_led_state(&mut self, _led_state: LedState) {}
+}
 
 impl DmabufHandler for WallyState<WinitData> {
     fn dmabuf_state(&mut self) -> &mut DmabufState {

@@ -9,13 +9,8 @@ mod ssd;
 mod state;
 mod types;
 mod util;
-mod winit;
 
 use clap::{Parser, ValueEnum};
-use smithay::reexports::{
-    calloop::EventLoop,
-    wayland_server::{Display, DisplayHandle},
-};
 
 use state::WallyState;
 
@@ -41,26 +36,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     util::log::init(args.log);
 
-    crate::winit::init()?;
+    crate::backend::winit::init()?;
 
     if let Some(command) = args.spawn {
         std::process::Command::new(command).spawn().ok();
     }
 
-    // event_loop.run(None, &mut data, move |_| {
-    //     // wally is running
-    // })?;
-
     Ok(())
 }
-
-// let output = state.space.outputs().next().unwrap().clone();
-// state.space.map_output(&output, (0, 0));
-
-// let mode = Mode {
-//     size,
-//     refresh: 60_000,
-// };
-
-// output.change_current_state(Some(mode), None, None, None);
-// output.set_preferred(mode);
