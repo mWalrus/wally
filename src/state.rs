@@ -1,5 +1,5 @@
 use std::{
-    ffi::OsString,
+    process::Command,
     sync::{atomic::AtomicBool, Arc, Mutex},
 };
 
@@ -28,7 +28,7 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, render::PointerElement, types::keybind::Action};
+use crate::{backend::Backend, types::keybind::Action};
 
 #[derive(Debug)]
 pub struct WallyState<BackendData: Backend + 'static> {
@@ -36,7 +36,7 @@ pub struct WallyState<BackendData: Backend + 'static> {
     pub backend_data: BackendData,
     pub clock: Clock<Monotonic>,
     pub start_time: std::time::Instant,
-    pub socket_name: OsString,
+    pub socket_name: String,
     pub display_handle: DisplayHandle,
 
     pub space: Space<Window>,
@@ -121,13 +121,16 @@ impl<BackendData: Backend> WallyState<BackendData> {
     fn init_wayland_listener(
         display: Display<WallyState<BackendData>>,
         loop_handle: LoopHandle<'static, WallyState<BackendData>>,
-    ) -> OsString {
+    ) -> String {
         // Creates a new listening socket, automatically choosing the next available `wayland` socket name.
         let listening_socket = ListeningSocketSource::new_auto().unwrap();
 
         // Get the name of the listening socket.
         // Clients will connect to this socket.
-        let socket_name = listening_socket.socket_name().to_os_string();
+        let socket_name = listening_socket
+            .socket_name()
+            .to_string_lossy()
+            .into_owned();
 
         loop_handle
             .insert_source(listening_socket, move |client_stream, _, state| {
@@ -193,7 +196,10 @@ impl<BackendData: Backend> WallyState<BackendData> {
     pub fn handle_action(&mut self, action: Action) {
         match action {
             Action::Spawn(command) => {
-                std::process::Command::new(command).spawn().ok();
+                Command::new(command)
+                    .env("WAYLAND_DISPLAY", &self.socket_name) // FIXME: xwayland DISPLAY
+                    .spawn()
+                    .ok();
             }
             _ => {}
         }

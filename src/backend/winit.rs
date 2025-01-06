@@ -145,8 +145,6 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     state.space.map_output(&output, (0, 0));
 
-    std::env::set_var("WAYLAND_DISPLAY", &state.socket_name);
-
     let mut pointer_element = PointerElement::default();
 
     while state.running.load(Ordering::SeqCst) {
