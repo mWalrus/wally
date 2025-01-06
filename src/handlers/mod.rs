@@ -33,7 +33,7 @@ impl<BackendData: Backend> SeatHandler for WallyState<BackendData> {
         _seat: &Seat<Self>,
         image: smithay::input::pointer::CursorImageStatus,
     ) {
-        self.cursor_image = image
+        self.cursor_status = image
     }
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
