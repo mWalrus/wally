@@ -5,7 +5,10 @@ use std::{
 
 use smithay::{
     desktop::{PopupManager, Space, Window, WindowSurfaceType},
-    input::{pointer::CursorImageStatus, Seat, SeatState},
+    input::{
+        pointer::{CursorImageStatus, PointerHandle},
+        Seat, SeatState,
+    },
     reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
@@ -50,6 +53,7 @@ pub struct WallyState<BackendData: Backend + 'static> {
     pub popups: PopupManager,
 
     pub seat: Seat<WallyState<BackendData>>,
+    pub pointer: PointerHandle<WallyState<BackendData>>,
 }
 
 impl<BackendData: Backend> WallyState<BackendData> {
@@ -79,7 +83,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
 
         // Notify clients that we have a pointer (mouse)
         // Here we assume that there is always pointer plugged in
-        seat.add_pointer();
+        let pointer = seat.add_pointer();
 
         // A space represents a two-dimensional plane. Windows and Outputs can be mapped onto it.
         //
@@ -109,6 +113,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
             data_device_state,
             popups,
             seat,
+            pointer,
         }
     }
 

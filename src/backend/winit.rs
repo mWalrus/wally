@@ -1,8 +1,11 @@
-use std::{sync::atomic::Ordering, time::Duration};
+use std::{
+    sync::{atomic::Ordering, Mutex},
+    time::Duration,
+};
 
 use crate::{
     config::CONFIG,
-    render::CustomRenderElement,
+    render::{CustomRenderElement, PointerElement},
     ssd::{self, BorderShader},
     WallyState,
 };
@@ -10,23 +13,33 @@ use smithay::{
     backend::{
         allocator::dmabuf::Dmabuf,
         renderer::{
-            damage::OutputDamageTracker, gles::GlesRenderer, ImportDma, ImportEgl, ImportMemWl,
+            damage::{Error as OutputDamageTrackerError, OutputDamageTracker},
+            element::AsRenderElements,
+            gles::GlesRenderer,
+            ImportDma, ImportEgl, ImportMemWl,
         },
         winit::{self, WinitEvent, WinitGraphicsBackend},
+        SwapBuffersError,
     },
     delegate_dmabuf,
     desktop::space::render_output,
-    input::keyboard::LedState,
+    input::{
+        keyboard::LedState,
+        pointer::{CursorImageAttributes, CursorImageStatus},
+    },
     output::{Mode, Output, PhysicalProperties, Subpixel},
     reexports::{
         calloop::EventLoop,
         wayland_server::{protocol::wl_surface::WlSurface, Display},
         winit::platform::pump_events::PumpStatus,
     },
-    utils::{Rectangle, Transform},
-    wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
+    utils::{IsAlive, Rectangle, Scale, Transform},
+    wayland::{
+        compositor,
+        dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
+    },
 };
-use tracing::info;
+use tracing::{error, info, warn};
 
 use super::{Backend, BackendDmabufState};
 
@@ -146,6 +159,8 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     std::env::set_var("WAYLAND_DISPLAY", &state.socket_name);
 
+    let mut pointer_element = PointerElement::default();
+
     while state.running.load(Ordering::SeqCst) {
         let status = winit_event_loop.dispatch_new_events(|event| match event {
             WinitEvent::Resized { size, .. } => {
@@ -169,7 +184,12 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        draw(&mut state, &mut output_damage_tracker, &output);
+        draw(
+            &mut state,
+            &mut pointer_element,
+            &mut output_damage_tracker,
+            &output,
+        );
 
         // dispatch all pending events accumulated during the draw routine
         // so that they will be processed during the next cycle of the event loop
@@ -195,6 +215,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
 fn draw(
     state: &mut WallyState<WinitData>,
+    pointer: &mut PointerElement,
     damage_tracker: &mut OutputDamageTracker,
     output: &Output,
 ) {
@@ -203,55 +224,110 @@ fn draw(
     let size = backend.window_size();
     let damage = Rectangle::from_size(size);
 
-    backend.bind().unwrap();
-
     let mut elements = Vec::<CustomRenderElement>::new();
 
-    let border_thickness = CONFIG.border_thickness as i32;
+    let current_output_fractional_scale = Scale::from(output.current_scale().fractional_scale());
 
-    for window in state.space.elements() {
-        let Some(mut geometry) = state.space.element_geometry(window) else {
-            continue;
+    let render_result = backend.bind().and_then(|_| {
+        if let CursorImageStatus::Surface(ref surface) = state.cursor_status {
+            if !surface.alive() {
+                state.cursor_status = CursorImageStatus::default_named();
+            }
+        }
+
+        let cursor_visible = !matches!(state.cursor_status, CursorImageStatus::Surface(_));
+
+        pointer.set_status(state.cursor_status.clone());
+
+        let cursor_hotspot = if let CursorImageStatus::Surface(ref surface) = state.cursor_status {
+            compositor::with_states(surface, |states| {
+                states
+                    .data_map
+                    .get::<Mutex<CursorImageAttributes>>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .hotspot
+            })
+        } else {
+            (0, 0).into()
         };
 
-        geometry.size += (border_thickness * 2, border_thickness * 2).into();
+        let cursor_pos = state.pointer.current_location();
 
-        geometry.loc -= (border_thickness, border_thickness).into();
+        elements.extend(
+            pointer.render_elements(
+                backend.renderer(),
+                (cursor_pos - cursor_hotspot.to_f64())
+                    .to_physical(current_output_fractional_scale)
+                    .to_i32_round(),
+                current_output_fractional_scale,
+                1.0,
+            ),
+        );
 
-        elements.push(CustomRenderElement::from(BorderShader::element(
-            backend.renderer(),
-            geometry,
-            CONFIG.border_color_focused,
-            CONFIG.border_thickness,
-        )));
-    }
+        let border_thickness = CONFIG.border_thickness as i32;
 
-    let age = backend.buffer_age().unwrap_or(0);
+        for window in state.space.elements() {
+            let Some(mut geometry) = state.space.element_geometry(window) else {
+                continue;
+            };
 
-    damage_tracker
-        .render_output(backend.renderer(), age, &elements, [0.0, 0.0, 0.0, 1.0])
-        .unwrap();
+            geometry.size += (border_thickness * 2, border_thickness * 2).into();
 
-    render_output::<_, CustomRenderElement, _, _>(
-        &output,
-        backend.renderer(),
-        1.0,
-        age,
-        [&state.space],
-        elements.as_slice(),
-        damage_tracker,
-        [0.0, 0.0, 0.0, 1.0],
-    )
-    .unwrap();
+            geometry.loc -= (border_thickness, border_thickness).into();
 
-    backend.submit(Some(&[damage])).unwrap();
+            elements.push(CustomRenderElement::from(BorderShader::element(
+                backend.renderer(),
+                geometry,
+                CONFIG.border_color_focused,
+                CONFIG.border_thickness,
+            )));
+        }
 
-    state.space.elements().for_each(|window| {
-        window.send_frame(
+        let age = backend.buffer_age().unwrap_or(0);
+
+        damage_tracker
+            .render_output(backend.renderer(), age, &elements, [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+
+        render_output::<_, CustomRenderElement, _, _>(
             &output,
-            state.start_time.elapsed(),
-            Some(Duration::ZERO),
-            |_, _| Some(output.clone()),
+            backend.renderer(),
+            1.0,
+            age,
+            [&state.space],
+            elements.as_slice(),
+            damage_tracker,
+            [0.0, 0.0, 0.0, 1.0],
         )
+        .map_err(|err| match err {
+            OutputDamageTrackerError::Rendering(err) => err.into(),
+            _ => unreachable!(),
+        })
     });
+
+    match render_result {
+        Ok(render_output_result) => {
+            if let Some(damage) = render_output_result.damage {
+                if let Err(err) = backend.submit(Some(damage)) {
+                    warn!("Failed to submit damage buffer: {err}");
+                }
+            }
+
+            state.space.elements().for_each(|window| {
+                window.send_frame(
+                    &output,
+                    state.start_time.elapsed(),
+                    Some(Duration::ZERO),
+                    |_, _| Some(output.clone()),
+                )
+            });
+        }
+        Err(SwapBuffersError::ContextLost(err)) => {
+            error!("Critical rendering error: {err}");
+            state.running.store(false, Ordering::SeqCst);
+        }
+        Err(err) => warn!("Rendering error: {err}"),
+    }
 }
