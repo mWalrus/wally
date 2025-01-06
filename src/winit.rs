@@ -89,7 +89,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     output.set_preferred(mode);
 
-    let dmabuf = BackendDmabufState::new_winit(backend.renderer(), &display_handle);
+    let dmabuf = BackendDmabufState::new(backend.renderer(), &display_handle);
 
     if backend.renderer().bind_wl_display(&display_handle).is_ok() {
         info!("EGL hardware-acceleration enabled");

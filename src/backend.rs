@@ -50,32 +50,38 @@ pub struct BackendDmabufState {
 }
 
 impl BackendDmabufState {
-    pub fn new_winit(renderer: &GlesRenderer, display_handle: &DisplayHandle) -> Self {
+    pub fn new(renderer: &GlesRenderer, display_handle: &DisplayHandle) -> Self {
         // if we failed to build dmabuf feedback we fall back to dmabuf v3
         // Note: egl on Mesa requires either v4 or wl_drm (initialized with bind_wl_display)
-        let (state, global, feedback) =
-            if let Some(default_feedback) = Self::default_feedback(renderer) {
-                let mut dmabuf_state = DmabufState::new();
-                let dmabuf_global = dmabuf_state
-                    .create_global_with_default_feedback::<WallyState<WinitData>>(
-                        display_handle,
-                        &default_feedback,
-                    );
-                (dmabuf_state, dmabuf_global, Some(default_feedback))
-            } else {
-                let dmabuf_formats = renderer.dmabuf_formats();
-                let mut dmabuf_state = DmabufState::new();
-                let dmabuf_global = dmabuf_state
-                    .create_global::<WallyState<WinitData>>(&display_handle, dmabuf_formats);
-                (dmabuf_state, dmabuf_global, None)
-            };
+        let Some(feedback) = Self::default_feedback(renderer) else {
+            return Self::new_no_feedback(renderer, display_handle);
+        };
+
+        let mut state = DmabufState::new();
+        let global = state.create_global_with_default_feedback::<WallyState<WinitData>>(
+            display_handle,
+            &feedback,
+        );
+
         Self {
             state,
             global,
-            feedback,
+            feedback: Some(feedback),
         }
     }
-    pub fn default_feedback(renderer: &GlesRenderer) -> Option<DmabufFeedback> {
+
+    pub fn new_no_feedback(renderer: &GlesRenderer, display_handle: &DisplayHandle) -> Self {
+        let dmabuf_formats = renderer.dmabuf_formats();
+        let mut state = DmabufState::new();
+        let global = state.create_global::<WallyState<WinitData>>(&display_handle, dmabuf_formats);
+        Self {
+            state,
+            global,
+            feedback: None,
+        }
+    }
+
+    fn default_feedback(renderer: &GlesRenderer) -> Option<DmabufFeedback> {
         let render_node = EGLDevice::device_for_display(renderer.egl_context().display())
             .and_then(|device| device.try_get_render_node());
 
