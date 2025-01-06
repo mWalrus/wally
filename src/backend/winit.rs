@@ -2,6 +2,7 @@ use std::{sync::atomic::Ordering, time::Duration};
 
 use crate::{
     config::CONFIG,
+    monitor::Monitor,
     render::{CustomRenderElement, PointerElement},
     ssd::{self, BorderShader},
     WallyState,
@@ -118,6 +119,8 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     output.set_preferred(mode);
 
+    let monitor = Monitor::new(output);
+
     let dmabuf = BackendDmabufState::new(backend.renderer(), &display_handle);
 
     if backend.renderer().bind_wl_display(&display_handle).is_ok() {
@@ -125,7 +128,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let winit_data = {
-        let damage_tracker = OutputDamageTracker::from_output(&output);
+        let damage_tracker = OutputDamageTracker::from_output(&monitor.output_ref());
 
         WinitData {
             backend,
@@ -143,14 +146,17 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
         .shm_state
         .update_formats(state.backend_data.backend.renderer().shm_formats());
 
-    state.space.map_output(&output, (0, 0));
+    state.space.map_output(monitor.output_ref(), (0, 0));
+
+    // add the monitor to the current compositor state
+    state.add_monitor(monitor);
 
     let mut pointer_element = PointerElement::default();
 
     while state.running.load(Ordering::SeqCst) {
         let status = winit_event_loop.dispatch_new_events(|event| match event {
             WinitEvent::Resized { size, .. } => {
-                let output = state.space.outputs().next().unwrap().clone();
+                let output = state.monitors.iter().next().unwrap().output_ref();
                 state.space.map_output(&output, (0, 0));
 
                 let mode = Mode {
@@ -170,7 +176,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        draw(&mut state, &mut pointer_element, &output);
+        draw(&mut state, &mut pointer_element);
 
         // dispatch all pending events accumulated during the draw routine
         // so that they will be processed during the next cycle of the event loop
@@ -194,7 +200,11 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn draw(state: &mut WallyState<WinitData>, pointer: &mut PointerElement, output: &Output) {
+fn draw(state: &mut WallyState<WinitData>, pointer: &mut PointerElement) {
+    // NOTE: we only have one "monitor" when using the winit backend
+    let monitor = state.monitors.iter().next().unwrap();
+    let output = monitor.output_clone();
+
     let output_scale = Scale::from(output.current_scale().fractional_scale());
 
     let (cursor_visible, cursor_location) = state.get_cursor_data(output_scale);

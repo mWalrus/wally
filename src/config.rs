@@ -14,6 +14,7 @@ pub struct Config {
     pub border_thickness: u8,
     pub border_color_focused: u32,
     pub border_color_unfocused: u32,
+    pub workspace_count: usize,
     // MAYBE: gap: u8
     pub keybinds: HashMap<Keybind, Action>,
 }
@@ -24,6 +25,7 @@ impl Config {
             border_thickness: 2,
             border_color_focused: 0x00ff00,
             border_color_unfocused: 0xff0000,
+            workspace_count: 9,
             keybinds: HashMap::from([
                 (
                     Keybind::new(KeyModifiers::SUPER | KeyModifiers::SHIFT, keysyms::KEY_q),

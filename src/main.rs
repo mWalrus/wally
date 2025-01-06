@@ -4,11 +4,13 @@ mod backend;
 mod config;
 mod element;
 mod input;
+mod monitor;
 mod render;
 mod ssd;
 mod state;
 mod types;
 mod util;
+mod workspace;
 
 use clap::{Parser, ValueEnum};
 

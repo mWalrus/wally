@@ -28,7 +28,7 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, types::keybind::Action};
+use crate::{backend::Backend, monitor::Monitor, types::keybind::Action};
 
 #[derive(Debug)]
 pub struct WallyState<BackendData: Backend + 'static> {
@@ -39,6 +39,7 @@ pub struct WallyState<BackendData: Backend + 'static> {
     pub socket_name: String,
     pub display_handle: DisplayHandle,
 
+    pub monitors: Vec<Monitor>,
     pub space: Space<Window>,
 
     // Smithay State
@@ -101,6 +102,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
             start_time,
             display_handle,
 
+            monitors: Vec::new(),
             space,
             socket_name,
 
@@ -193,6 +195,10 @@ impl<BackendData: Backend> WallyState<BackendData> {
         (cursor_visible, cursor_location)
     }
 
+    pub fn add_monitor(&mut self, monitor: Monitor) {
+        self.monitors.push(monitor);
+    }
+
     pub fn handle_action(&mut self, action: Action) {
         match action {
             Action::Spawn(command) => {
@@ -219,6 +225,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
     }
 }
 
+#[derive(Debug)]
 pub struct ClientState {
     pub compositor_state: CompositorClientState,
 }
