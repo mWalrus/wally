@@ -88,16 +88,8 @@ where
     }
 }
 
-// pointer render element
 render_elements! {
     pub PointerRenderElement<R> where R: ImportAll + ImportMem;
     Surface=WaylandSurfaceRenderElement<R>,
     Memory=MemoryRenderBufferRenderElement<R>
-}
-
-// custom render elements
-render_elements! {
-    pub CustomRenderElement<=GlesRenderer>;
-    Pointer=PointerRenderElement<GlesRenderer>,
-    Pixel=PixelShaderElement,
 }

@@ -1,12 +1,9 @@
-mod handlers;
-
 mod backend;
 mod config;
-mod element;
+mod elements;
+mod handlers;
 mod input;
 mod monitor;
-mod render;
-mod ssd;
 mod state;
 mod types;
 mod util;

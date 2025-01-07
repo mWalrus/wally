@@ -7,7 +7,7 @@ use smithay::{
     utils::{Logical, Rectangle},
 };
 
-const BORDER_SHADER: &str = include_str!("shaders/border.frag");
+const BORDER_SHADER: &str = include_str!("../shaders/border.frag");
 
 pub struct BorderShader(pub GlesPixelProgram);
 

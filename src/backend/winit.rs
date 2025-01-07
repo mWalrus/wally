@@ -2,9 +2,8 @@ use std::{sync::atomic::Ordering, time::Duration};
 
 use crate::{
     config::CONFIG,
+    elements::{self, border::BorderShader, pointer::PointerElement, CustomRenderElement},
     monitor::Monitor,
-    render::{CustomRenderElement, PointerElement},
-    ssd::{self, BorderShader},
     WallyState,
 };
 use smithay::{
@@ -91,7 +90,7 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     let (mut backend, mut winit_event_loop) = winit::init::<GlesRenderer>()?;
 
-    ssd::compile_shaders(backend.renderer())?;
+    elements::border::compile_shaders(backend.renderer())?;
 
     let mode = Mode {
         size: backend.window_size(),
