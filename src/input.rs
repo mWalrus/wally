@@ -88,18 +88,20 @@ impl<BackendData: Backend> WallyState<BackendData> {
                         .map(|(w, l)| (w.clone(), l))
                     {
                         self.space.raise_element(&window, true);
-                        keyboard.set_focus(
-                            self,
-                            Some(window.toplevel().unwrap().wl_surface().clone()),
-                            serial,
-                        );
+
+                        let Some(surface) = window.wl_surface() else {
+                            return;
+                        };
+                        let surface = surface.into_owned();
+
+                        keyboard.set_focus(self, Some(surface), serial);
                         self.space.elements().for_each(|window| {
-                            window.toplevel().unwrap().send_pending_configure();
+                            window.send_pending_configure();
                         });
                     } else {
                         self.space.elements().for_each(|window| {
                             window.set_activated(false);
-                            window.toplevel().unwrap().send_pending_configure();
+                            window.send_pending_configure();
                         });
                         keyboard.set_focus(self, Option::<WlSurface>::None, serial);
                     }

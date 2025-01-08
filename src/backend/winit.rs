@@ -225,25 +225,6 @@ fn draw(state: &mut WallyState<WinitData>, pointer: &mut PointerElement) {
             1.0,
         ));
 
-        let border_thickness = CONFIG.border_thickness as i32;
-
-        for window in state.space.elements() {
-            let Some(mut geometry) = state.space.element_geometry(window) else {
-                continue;
-            };
-
-            geometry.size += (border_thickness * 2, border_thickness * 2).into();
-
-            geometry.loc -= (border_thickness, border_thickness).into();
-
-            elements.push(CustomRenderElement::from(BorderShader::element(
-                backend.renderer(),
-                geometry,
-                CONFIG.border_color_focused,
-                CONFIG.border_thickness,
-            )));
-        }
-
         let age = if *full_redraw > 0 {
             0
         } else {

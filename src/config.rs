@@ -11,7 +11,7 @@ lazy_static! {
 }
 
 pub struct Config {
-    pub border_thickness: u8,
+    pub border_thickness: i32,
     pub border_color_focused: u32,
     pub border_color_unfocused: u32,
     pub workspace_count: usize,

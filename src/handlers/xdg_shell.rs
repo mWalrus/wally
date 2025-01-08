@@ -19,7 +19,7 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, config::CONFIG, WallyState};
+use crate::{backend::Backend, elements::window::WindowElement, WallyState};
 
 impl<BackendData: Backend> XdgShellHandler for WallyState<BackendData> {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -27,10 +27,19 @@ impl<BackendData: Backend> XdgShellHandler for WallyState<BackendData> {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        let border_thickness = CONFIG.border_thickness as i32;
-        let window = Window::new_wayland_window(surface);
-        self.space
-            .map_element(window, (border_thickness, border_thickness), true);
+        // TODO: manage window in a workspace
+        let window = WindowElement(Window::new_wayland_window(surface.clone()));
+
+        // FIXME: remove this rng LOL
+        let [x, y] = {
+            let mut rng = std::fs::File::open("/dev/random").unwrap();
+            let mut buf = [0u8; 2];
+            std::io::Read::read_exact(&mut rng, &mut buf).unwrap();
+            let [x, y] = buf;
+            [x as i32, y as i32]
+        };
+
+        self.space.map_element(window, (x, y), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -74,11 +83,11 @@ impl<BackendData: Backend> XdgShellHandler for WallyState<BackendData> {
 delegate_xdg_shell!(@<BackendData: Backend + 'static> WallyState<BackendData>);
 
 /// Should be called on `WlSurface::commit`
-pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: &WlSurface) {
+pub fn handle_commit(popups: &mut PopupManager, space: &Space<WindowElement>, surface: &WlSurface) {
     // Handle toplevel commits.
     if let Some(window) = space
         .elements()
-        .find(|w| w.toplevel().unwrap().wl_surface() == surface)
+        .find(|w| w.surface_matches(surface))
         .cloned()
     {
         let initial_configure_sent = with_states(surface, |states| {
@@ -92,7 +101,7 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
         });
 
         if !initial_configure_sent {
-            window.toplevel().unwrap().send_configure();
+            window.send_configure();
         }
     }
 
@@ -113,21 +122,26 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
 }
 
 impl<BackendData: Backend> WallyState<BackendData> {
+    fn window_for_surface(&self, surface: &WlSurface) -> Option<WindowElement> {
+        self.space
+            .elements()
+            .find(|window| window.surface_matches(surface))
+            .cloned()
+    }
+
     fn unconstrain_popup(&self, popup: &PopupSurface) {
         let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
             return;
         };
-        let Some(window) = self
-            .space
-            .elements()
-            .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-        else {
+
+        let Some(window) = self.window_for_surface(&root) else {
             return;
         };
 
         let output = self.space.outputs().next().unwrap();
+
         let output_geo = self.space.output_geometry(output).unwrap();
-        let window_geo = self.space.element_geometry(window).unwrap();
+        let window_geo = self.space.element_geometry(&window).unwrap();
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.

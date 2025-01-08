@@ -4,7 +4,7 @@ use std::{
 };
 
 use smithay::{
-    desktop::{PopupManager, Space, Window, WindowSurfaceType},
+    desktop::{PopupManager, Space, WindowSurfaceType},
     input::{
         pointer::{CursorImageAttributes, CursorImageStatus, PointerHandle},
         Seat, SeatState,
@@ -28,7 +28,9 @@ use smithay::{
     },
 };
 
-use crate::{backend::Backend, monitor::Monitor, types::keybind::Action};
+use crate::{
+    backend::Backend, elements::window::WindowElement, monitor::Monitor, types::keybind::Action,
+};
 
 #[derive(Debug)]
 pub struct WallyState<BackendData: Backend + 'static> {
@@ -40,7 +42,7 @@ pub struct WallyState<BackendData: Backend + 'static> {
     pub display_handle: DisplayHandle,
 
     pub monitors: Vec<Monitor>,
-    pub space: Space<Window>,
+    pub space: Space<WindowElement>,
 
     // Smithay State
     pub cursor_status: CursorImageStatus,

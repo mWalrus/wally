@@ -34,12 +34,8 @@ impl<BackendData: Backend> CompositorHandler for WallyState<BackendData> {
             while let Some(parent) = get_parent(&root) {
                 root = parent;
             }
-            if let Some(window) = self
-                .space
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-            {
-                window.on_commit();
+            if let Some(window) = self.space.elements().find(|w| w.surface_matches(&root)) {
+                window.0.on_commit();
             }
         };
 

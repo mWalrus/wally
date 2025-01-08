@@ -1,7 +1,7 @@
 use anyhow::Result;
 use smithay::{
     backend::renderer::{
-        element::Kind,
+        element::{AsRenderElements, Kind},
         gles::{element::PixelShaderElement, GlesPixelProgram, GlesRenderer, Uniform, UniformName},
     },
     utils::{Logical, Rectangle},
@@ -13,10 +13,10 @@ pub struct BorderShader(pub GlesPixelProgram);
 
 impl BorderShader {
     pub fn element(
-        renderer: &GlesRenderer,
+        renderer: &mut GlesRenderer,
         geometry: Rectangle<i32, Logical>,
         color: u32,
-        thickness: u8,
+        thickness: i32,
     ) -> PixelShaderElement {
         let program = renderer
             .egl_context()
