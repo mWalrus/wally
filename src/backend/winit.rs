@@ -1,8 +1,7 @@
 use std::{sync::atomic::Ordering, time::Duration};
 
 use crate::{
-    config::CONFIG,
-    elements::{self, border::BorderShader, pointer::PointerElement, CustomRenderElement},
+    elements::{self, pointer::PointerElement, CustomRenderElement},
     monitor::Monitor,
     WallyState,
 };

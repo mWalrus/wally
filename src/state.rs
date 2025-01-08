@@ -29,7 +29,8 @@ use smithay::{
 };
 
 use crate::{
-    backend::Backend, elements::window::WindowElement, monitor::Monitor, types::keybind::Action,
+    backend::Backend, elements::window::WindowElement, focus::PointerFocusTarget, monitor::Monitor,
+    types::keybind::Action,
 };
 
 #[derive(Debug)]
@@ -216,7 +217,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
     pub fn surface_under(
         &self,
         pos: Point<f64, Logical>,
-    ) -> Option<(WlSurface, Point<f64, Logical>)> {
+    ) -> Option<(PointerFocusTarget, Point<f64, Logical>)> {
         self.space
             .element_under(pos)
             .and_then(|(window, location)| {

@@ -1,4 +1,8 @@
-use std::{borrow::Cow, time::Duration};
+use std::{
+    borrow::Cow,
+    cell::{RefCell, RefMut},
+    time::Duration,
+};
 
 use smithay::{
     backend::renderer::{
@@ -6,33 +10,68 @@ use smithay::{
         gles::{element::PixelShaderElement, GlesRenderer},
     },
     desktop::{space::SpaceElement, Window, WindowSurface, WindowSurfaceType},
+    input::{
+        pointer::{
+            GestureHoldBeginEvent, GestureHoldEndEvent, GesturePinchBeginEvent,
+            GesturePinchEndEvent, GesturePinchUpdateEvent, GestureSwipeBeginEvent,
+            GestureSwipeEndEvent, GestureSwipeUpdateEvent, MotionEvent, PointerTarget,
+            RelativeMotionEvent,
+        },
+        Seat,
+    },
     output::Output,
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    reexports::wayland_server::{backend::ObjectId, protocol::wl_surface::WlSurface, Resource},
     render_elements,
-    utils::{IsAlive, Logical, Physical, Point, Rectangle},
+    utils::{
+        user_data::UserDataMap, IsAlive, Logical, Physical, Point, Rectangle, Serial,
+        SERIAL_COUNTER,
+    },
     wayland::{compositor::SurfaceData, seat::WaylandFocus},
 };
 
-use crate::config::CONFIG;
+use crate::{backend::Backend, config::CONFIG, focus::PointerFocusTarget, state::WallyState};
 
 use super::border::BorderShader;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowElement(pub Window);
 
+pub struct WindowState {
+    is_focused: bool,
+}
+
 impl WindowElement {
     pub fn surface_under(
         &self,
-        location: Point<f64, Logical>,
-        surface_type: WindowSurfaceType,
-    ) -> Option<(WlSurface, Point<i32, Logical>)> {
-        let offset = Point::from((CONFIG.border_thickness, CONFIG.border_thickness));
+        _location: Point<f64, Logical>,
+        _surface_type: WindowSurfaceType,
+    ) -> Option<(PointerFocusTarget, Point<i32, Logical>)> {
+        // FIXME: always returning this element prevents me from rendering
+        //        the surface cursors for the current window
+        Some((
+            PointerFocusTarget::WindowElement(self.clone()),
+            Point::default(),
+        ))
+        // self.0
+        //     .surface_under(location, surface_type)
+        //     .map(|(surface, loc)| (PointerFocusTarget::WlSurface(surface), loc))
+    }
 
-        let surface_under = self
-            .0
-            .surface_under(location - offset.to_f64(), surface_type);
+    pub fn window_state(&self) -> RefMut<'_, WindowState> {
+        // NOTE: we set focus to true when spawning a new window state
+        //       since we will want the window to be focused on creation
+        self.user_data()
+            .insert_if_missing(|| RefCell::new(WindowState { is_focused: true }));
 
-        surface_under
+        self.user_data()
+            .get::<RefCell<WindowState>>()
+            .unwrap()
+            .borrow_mut()
+    }
+
+    #[inline]
+    pub fn user_data(&self) -> &UserDataMap {
+        self.0.user_data()
     }
 
     #[inline]
@@ -68,6 +107,12 @@ impl WindowElement {
     {
         self.0
             .send_frame(output, time, throttle, primary_scan_out_output);
+    }
+
+    pub fn same_client_as(&self, object_id: &ObjectId) -> bool {
+        self.wl_surface()
+            .map(|s| s.id().same_client_as(object_id))
+            .unwrap_or(false)
     }
 
     pub fn send_pending_configure(&self) {
@@ -153,34 +198,190 @@ impl AsRenderElements<GlesRenderer> for WindowElement {
         // get the inner window's bounding box, not the wrapping `WindowElement`
         let window_bounding_box = SpaceElement::bbox(&self.0);
 
-        if !window_bounding_box.is_empty() {
+        if window_bounding_box.is_empty() {
+            return Vec::new();
+        }
+
+        let border_thickness = CONFIG.border_thickness;
+
+        let border_geometry = {
             let window_geometry = SpaceElement::geometry(&self.0);
-
-            let border_thickness = CONFIG.border_thickness;
-
             let loc: Point<i32, Logical> =
                 (location.x - border_thickness, location.y - border_thickness).into();
             let size = window_geometry.size + (border_thickness * 2, border_thickness * 2).into();
 
-            let border_geometry = Rectangle::new(loc, size);
+            Rectangle::new(loc, size)
+        };
 
-            let border = BorderShader::element(
-                renderer,
-                border_geometry,
-                CONFIG.border_color_focused,
-                border_thickness,
-            );
+        let color = {
+            let state = self.window_state();
+            if state.is_focused {
+                CONFIG.border_color_focused
+            } else {
+                CONFIG.border_color_unfocused
+            }
+        };
 
-            let mut vec: Vec<WindowRenderElement> = vec![border.into()];
+        let border = BorderShader::element(renderer, border_geometry, color, border_thickness);
 
-            let window_elements =
-                AsRenderElements::render_elements(&self.0, renderer, location, scale, alpha);
+        let mut vec: Vec<WindowRenderElement> = vec![border.into()];
 
-            vec.extend(window_elements);
+        let window_elements =
+            AsRenderElements::render_elements(&self.0, renderer, location, scale, alpha);
 
-            return vec.into_iter().map(C::from).collect();
-        }
+        vec.extend(window_elements);
 
-        Vec::new()
+        return vec.into_iter().map(C::from).collect();
+    }
+}
+
+impl<BackendData: Backend> PointerTarget<WallyState<BackendData>> for WindowElement {
+    fn enter(
+        &self,
+        seat: &Seat<WallyState<BackendData>>,
+        data: &mut WallyState<BackendData>,
+        _event: &MotionEvent,
+    ) {
+        let serial = SERIAL_COUNTER.next_serial();
+        let Some(surface) = self.wl_surface() else {
+            return;
+        };
+
+        let Some(keyboard) = seat.get_keyboard() else {
+            return;
+        };
+
+        keyboard.set_focus(data, Some((*surface).clone()), serial);
+
+        let mut window_state = self.window_state();
+        window_state.is_focused = true;
+
+        // TODO: figure out what this does
+        self.set_activated(true);
+
+        data.space
+            .elements()
+            .for_each(|window| window.send_pending_configure());
+    }
+
+    fn motion(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &MotionEvent,
+    ) {
+    }
+
+    fn relative_motion(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &RelativeMotionEvent,
+    ) {
+    }
+
+    fn button(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &smithay::input::pointer::ButtonEvent,
+    ) {
+    }
+
+    fn axis(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _frame: smithay::input::pointer::AxisFrame,
+    ) {
+    }
+
+    fn frame(&self, _seat: &Seat<WallyState<BackendData>>, _data: &mut WallyState<BackendData>) {}
+
+    fn gesture_swipe_begin(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GestureSwipeBeginEvent,
+    ) {
+    }
+
+    fn gesture_swipe_update(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GestureSwipeUpdateEvent,
+    ) {
+    }
+
+    fn gesture_swipe_end(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GestureSwipeEndEvent,
+    ) {
+    }
+
+    fn gesture_pinch_begin(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GesturePinchBeginEvent,
+    ) {
+    }
+
+    fn gesture_pinch_update(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GesturePinchUpdateEvent,
+    ) {
+    }
+
+    fn gesture_pinch_end(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GesturePinchEndEvent,
+    ) {
+    }
+
+    fn gesture_hold_begin(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GestureHoldBeginEvent,
+    ) {
+    }
+
+    fn gesture_hold_end(
+        &self,
+        _seat: &Seat<WallyState<BackendData>>,
+        _data: &mut WallyState<BackendData>,
+        _event: &GestureHoldEndEvent,
+    ) {
+    }
+
+    fn leave(
+        &self,
+        seat: &Seat<WallyState<BackendData>>,
+        data: &mut WallyState<BackendData>,
+        serial: Serial,
+        _time: u32,
+    ) {
+        let Some(keyboard) = seat.get_keyboard() else {
+            return;
+        };
+
+        keyboard.set_focus(data, None, serial);
+
+        let mut state = self.window_state();
+        state.is_focused = false;
+
+        self.set_activated(false);
+
+        data.space
+            .elements()
+            .for_each(|window| window.send_pending_configure());
     }
 }

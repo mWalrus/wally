@@ -2,6 +2,7 @@ mod compositor;
 mod xdg_shell;
 
 use crate::backend::Backend;
+use crate::focus::PointerFocusTarget;
 use crate::WallyState;
 
 //
@@ -21,7 +22,7 @@ use smithay::{delegate_data_device, delegate_output, delegate_seat};
 
 impl<BackendData: Backend> SeatHandler for WallyState<BackendData> {
     type KeyboardFocus = WlSurface;
-    type PointerFocus = WlSurface;
+    type PointerFocus = PointerFocusTarget;
     type TouchFocus = WlSurface;
 
     fn seat_state(&mut self) -> &mut SeatState<WallyState<BackendData>> {

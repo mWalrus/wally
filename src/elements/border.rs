@@ -1,7 +1,7 @@
 use anyhow::Result;
 use smithay::{
     backend::renderer::{
-        element::{AsRenderElements, Kind},
+        element::Kind,
         gles::{element::PixelShaderElement, GlesPixelProgram, GlesRenderer, Uniform, UniformName},
     },
     utils::{Logical, Rectangle},

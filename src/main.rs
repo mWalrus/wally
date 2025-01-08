@@ -1,6 +1,7 @@
 mod backend;
 mod config;
 mod elements;
+mod focus;
 mod handlers;
 mod input;
 mod monitor;

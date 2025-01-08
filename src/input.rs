@@ -1,14 +1,13 @@
 use smithay::{
     backend::input::{
         AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, InputEvent,
-        KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent,
+        KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
     },
     input::{
         keyboard::FilterResult,
-        pointer::{AxisFrame, ButtonEvent, MotionEvent},
+        pointer::{AxisFrame, ButtonEvent, MotionEvent, RelativeMotionEvent},
     },
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::SERIAL_COUNTER,
+    utils::{Logical, Point, SERIAL_COUNTER},
 };
 
 use crate::{backend::Backend, config::CONFIG, state::WallyState, types::keybind::Keybind};
@@ -46,7 +45,43 @@ impl<BackendData: Backend> WallyState<BackendData> {
                     self.handle_action(action);
                 }
             }
-            InputEvent::PointerMotion { .. } => {}
+            InputEvent::PointerMotion { event } => {
+                // TODO:
+                //     - Check whether pointer is "locked"
+                //         - Handle pointer lock
+                //     - Check whether pointer is "confined" and to what region
+                //         - Handle pointer confinement
+
+                let pointer_location = self.pointer.current_location();
+                let under = self.surface_under(pointer_location);
+
+                let serial = SERIAL_COUNTER.next_serial();
+
+                let pointer = self.pointer.clone();
+                pointer.relative_motion(
+                    self,
+                    under.clone(),
+                    &RelativeMotionEvent {
+                        delta: event.delta(),
+                        delta_unaccel: event.delta_unaccel(),
+                        utime: event.time(),
+                    },
+                );
+
+                let pointer_location = self.clamp_coords(pointer_location);
+
+                pointer.motion(
+                    self,
+                    under,
+                    &MotionEvent {
+                        location: pointer_location,
+                        serial,
+                        time: event.time_msec(),
+                    },
+                );
+
+                pointer.frame(self);
+            }
             InputEvent::PointerMotionAbsolute { event, .. } => {
                 let output = self.space.outputs().next().unwrap();
 
@@ -56,7 +91,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
 
                 let serial = SERIAL_COUNTER.next_serial();
 
-                let pointer = self.seat.get_pointer().unwrap();
+                let pointer = self.pointer.clone();
 
                 let under = self.surface_under(pos);
 
@@ -72,7 +107,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
                 pointer.frame(self);
             }
             InputEvent::PointerButton { event, .. } => {
-                let pointer = self.seat.get_pointer().unwrap();
+                let pointer = self.pointer.clone();
                 let keyboard = self.seat.get_keyboard().unwrap();
 
                 let serial = SERIAL_COUNTER.next_serial();
@@ -89,12 +124,6 @@ impl<BackendData: Backend> WallyState<BackendData> {
                     {
                         self.space.raise_element(&window, true);
 
-                        let Some(surface) = window.wl_surface() else {
-                            return;
-                        };
-                        let surface = surface.into_owned();
-
-                        keyboard.set_focus(self, Some(surface), serial);
                         self.space.elements().for_each(|window| {
                             window.send_pending_configure();
                         });
@@ -103,7 +132,7 @@ impl<BackendData: Backend> WallyState<BackendData> {
                             window.set_activated(false);
                             window.send_pending_configure();
                         });
-                        keyboard.set_focus(self, Option::<WlSurface>::None, serial);
+                        keyboard.set_focus(self, None, serial);
                     }
                 };
 
@@ -159,5 +188,36 @@ impl<BackendData: Backend> WallyState<BackendData> {
             }
             _ => {}
         }
+    }
+
+    /// Adjust a coordinate point to within the total space of all outputs
+    fn clamp_coords(&self, pos: Point<f64, Logical>) -> Point<f64, Logical> {
+        if self.space.outputs().next().is_none() {
+            return pos;
+        }
+
+        let (pos_x, pos_y) = pos.into();
+
+        let max_x = self.space.outputs().fold(0, |total_width, output| {
+            total_width + self.space.output_geometry(output).unwrap().size.w
+        });
+
+        let clamped_x = pos_x.clamp(0.0, max_x as f64);
+
+        let max_y = self
+            .space
+            .outputs()
+            .find(|output| {
+                let output_geometry = self.space.output_geometry(output).unwrap();
+                output_geometry.contains((clamped_x as i32, 0))
+            })
+            .map(|output| self.space.output_geometry(output).unwrap().size.h);
+
+        let Some(max_y) = max_y else {
+            return (clamped_x, pos_y).into();
+        };
+
+        let clamped_y = pos_y.clamp(0.0, max_y as f64);
+        (clamped_x, clamped_y).into()
     }
 }
