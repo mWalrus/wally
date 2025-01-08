@@ -52,6 +52,10 @@ impl WindowElement {
             .unwrap_or(false)
     }
 
+    pub fn on_commit(&self) {
+        self.0.on_commit();
+    }
+
     pub fn send_frame<T, F>(
         &self,
         output: &Output,
